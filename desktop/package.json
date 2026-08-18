@@ -1,0 +1,88 @@
+{
+  "name": "retailos-desktop",
+  "productName": "RetailOS",
+  "version": "0.1.0",
+  "description": "RetailOS desktop client (Electron + React 19 + TypeScript + Tailwind).",
+  "author": "RetailOS",
+  "license": "MIT",
+  "private": true,
+  "main": "dist-electron/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n vite,electron -c cyan,magenta \"vite\" \"wait-on http://localhost:5173 && node scripts/build-electron-main.mjs && electron .\"",
+    "build:renderer": "tsc --noEmit && vite build",
+    "build:electron": "node scripts/build-electron-main.mjs",
+    "build": "pnpm build:renderer && pnpm build:electron",
+    "preview": "vite preview",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit && tsc -p electron/tsconfig.json --noEmit",
+    "dist": "npm run build && electron-builder --publish never",
+    "dist:win": "npm run build && electron-builder --win --publish never"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.62.0",
+    "clsx": "^2.1.1",
+    "framer-motion": "^11.13.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-hook-form": "^7.53.2",
+    "react-router-dom": "^7.0.2",
+    "tailwind-merge": "^2.5.5",
+    "zod": "^3.24.1",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "eslint": "^9.16.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.1",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.retailos.desktop",
+    "productName": "RetailOS",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "RetailOS-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "RetailOS"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.business"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Office"
+    }
+  }
+}

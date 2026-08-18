@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "retailos-backend"
+version = "0.1.0"
+description = "RetailOS backend — FastAPI service (Clean Architecture, async SQLAlchemy 2, Alembic)."
+requires-python = ">=3.13"
+license = { text = "Proprietary" }
+
+# Runtime dependencies. Versions are ranged, not pinned; a lockfile (uv.lock / pip-compile)
+# is generated in later milestones once the surface stabilises.
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "greenlet>=3.1",
+    "python-jose[cryptography]>=3.3",       # JWT (used from Milestone 2)
+    "passlib[argon2]>=1.7.4",               # password hashing (used from Milestone 2)
+    "argon2-cffi>=23.1",
+    "python-multipart>=0.0.19",             # form uploads
+    "email-validator>=2.2",
+    "structlog>=24.4",
+    "redis>=5.2",
+    "httpx>=0.28",
+    "orjson>=3.10",
+    "slowapi>=0.1.9",                       # rate limiting
+    "apscheduler>=3.10",                    # scheduled jobs (M6)
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "types-passlib",
+    "anyio>=4.6",
+    "aiosqlite>=0.20",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+# ---- Tooling ----------------------------------------------------------------
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "N", "C4", "PL", "RUF"]
+ignore = ["PLR0913"]  # allow many-arg constructors (common in service classes)
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = ["pydantic.mypy"]

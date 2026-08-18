@@ -1,0 +1,71 @@
+"""Customer DTOs."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import date, datetime
+
+from pydantic import BaseModel, EmailStr, Field
+
+from app.schemas.common import ORMModel
+
+
+class CustomerBase(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    phone: str | None = Field(default=None, max_length=32)
+    email: EmailStr | None = None
+    gstin: str | None = Field(default=None, min_length=15, max_length=15)
+    company_name: str | None = Field(default=None, max_length=255)
+    date_of_birth: date | None = None
+    anniversary: date | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country: str = Field(default="IN", min_length=2, max_length=2)
+    notes: str | None = Field(default=None, max_length=1024)
+    is_active: bool = True
+
+
+class CustomerCreate(CustomerBase):
+    pass
+
+
+class CustomerUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    phone: str | None = None
+    email: EmailStr | None = None
+    gstin: str | None = Field(default=None, min_length=15, max_length=15)
+    company_name: str | None = None
+    date_of_birth: date | None = None
+    anniversary: date | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country: str | None = Field(default=None, min_length=2, max_length=2)
+    notes: str | None = None
+    is_active: bool | None = None
+
+
+class CustomerRead(ORMModel):
+    id: uuid.UUID
+    name: str
+    phone: str | None
+    email: EmailStr | None
+    gstin: str | None
+    company_name: str | None
+    date_of_birth: date | None
+    anniversary: date | None
+    address_line1: str | None
+    address_line2: str | None
+    city: str | None
+    state: str | None
+    postal_code: str | None
+    country: str
+    notes: str | None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime

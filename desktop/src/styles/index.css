@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+ * Global visual system
+ *
+ * The app-shell paints a subtle grid + aurora radial gradient behind every
+ * page so navigation feels continuous. Local components layer glass surfaces
+ * on top via the `.glass` utility class defined below.
+ * ------------------------------------------------------------------------- */
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  /* Force OS-drawn form widgets (select popup, native date-picker calendar,
+     time picker, colour picker, scrollbars) into their dark variant. Some
+     Chromium versions ignore :root color-scheme for widget internals unless
+     it is set on the element itself. */
+  select,
+  input[type='date'],
+  input[type='time'],
+  input[type='datetime-local'],
+  input[type='month'],
+  input[type='week'],
+  input[type='color'] {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-ink-950 text-slate-200 font-sans;
+    background-image:
+      radial-gradient(1200px 600px at 10% -10%, rgba(31, 71, 240, 0.35), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(6, 182, 212, 0.18), transparent 60%),
+      radial-gradient(700px 500px at 50% 120%, rgba(31, 71, 240, 0.18), transparent 60%);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Custom scrollbar to match the enterprise vibe */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  /* Selection */
+  ::selection {
+    background: rgba(31, 71, 240, 0.45);
+    color: #eaf2ff;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-surface backdrop-blur-xl border border-border shadow-glass rounded-2xl;
+  }
+  .glass-strong {
+    @apply bg-surface-strong backdrop-blur-2xl border border-border-strong shadow-glass-lg rounded-2xl;
+  }
+
+  /* Draggable region for the frameless window title bar. */
+  .titlebar-drag {
+    -webkit-app-region: drag;
+  }
+  .titlebar-no-drag {
+    -webkit-app-region: no-drag;
+  }
+
+  .grid-overlay {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+}

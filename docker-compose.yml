@@ -1,0 +1,44 @@
+# Development infrastructure for RetailOS.
+#
+# This file only spins up the *dependencies* (Postgres, Redis) — not the app itself.
+# The FastAPI backend and Electron desktop client run natively on the developer's
+# machine during Phase 1 so hot-reload and native OS integration stay fast. Full
+# containerisation of the API arrives in Phase 4.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: retailos-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-retailos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-retailos}
+      POSTGRES_DB: ${POSTGRES_DB:-retailos}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - retailos_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-retailos} -d ${POSTGRES_DB:-retailos}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: retailos-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - retailos_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  retailos_pgdata:
+  retailos_redisdata:
