@@ -134,20 +134,63 @@ html[data-theme='light'] [class*='bg-ink-700'] { background-color: rgba(240, 243
 html[data-theme='light'] [class*='bg-ink-600'] { background-color: rgba(228, 233, 245, 0.90) !important; }
 html[data-theme='light'] [class*='bg-surface'] { background-color: rgba(255, 255, 255, 0.85) !important; }
 
-/* Text — flip slate greys to dark slates so text stays readable.
-   Note: `text-white` is deliberately NOT included — it stays white so that
-   coloured buttons (primary cobalt gradient, danger red) keep readable
-   labels. Buttons that used near-white text on transparent surfaces
-   (secondary / ghost variants) are handled explicitly below. */
+/* Text — flip every slate grey to a dark equivalent in light mode.
+   `text-white` is deliberately NOT included — it stays white on coloured
+   buttons (primary cobalt gradient, danger red). Buttons that used near-white
+   text on transparent surfaces (secondary / ghost variants) are handled
+   explicitly further down. */
+html[data-theme='light'] [class*='text-slate-50'],
 html[data-theme='light'] [class*='text-slate-100'],
 html[data-theme='light'] [class*='text-slate-200'],
 html[data-theme='light'] [class*='text-slate-300'],
 html[data-theme='light'] [class*='text-slate-400'] {
-  color: #101425 !important;
+  color: #101425 !important;   /* ink-950 — near-black */
 }
-html[data-theme='light'] [class*='text-slate-500'],
-html[data-theme='light'] [class*='text-slate-600'] {
-  color: #48506a !important;
+html[data-theme='light'] [class*='text-slate-500'] {
+  color: #3b4257 !important;   /* darker slate for medium-emphasis text */
+}
+html[data-theme='light'] [class*='text-slate-600'],
+html[data-theme='light'] [class*='text-slate-700'],
+html[data-theme='light'] [class*='text-slate-800'] {
+  color: #4d556d !important;   /* softer slate for low-emphasis captions */
+}
+
+/* Input placeholders — Tailwind uses `placeholder:text-slate-*`, which the
+   attribute-selector above won't catch. Force placeholders to a visible grey. */
+html[data-theme='light'] input::placeholder,
+html[data-theme='light'] textarea::placeholder {
+  color: rgba(16, 20, 37, 0.45) !important;
+}
+
+/* Native input backgrounds + text — Tailwind form inputs use `bg-ink-*` or
+   `bg-white/[0.04]`, both covered above; but the caret + selection colours
+   need the light palette explicitly. */
+html[data-theme='light'] input,
+html[data-theme='light'] textarea,
+html[data-theme='light'] select {
+  color: #101425;
+  caret-color: #101425;
+}
+
+/* KBD chips inside empty-state hints (Held Bills panel, tooltips). Their
+   background was a translucent white — invisible on light backgrounds. */
+html[data-theme='light'] kbd {
+  background-color: rgba(16, 20, 37, 0.08) !important;
+  color: #101425 !important;
+  border: 1px solid rgba(16, 20, 37, 0.14);
+}
+
+/* Disabled controls should be visibly muted, not invisible. */
+html[data-theme='light'] :disabled {
+  color: #7a819a !important;
+}
+
+/* Chart axis labels + gridlines — the dashboard uses default light-mode
+   colours from the chart library, but its wrapper text (title / hint) uses
+   text-slate-* which the block above already handles. This is just for
+   safety on SVG <text> tags rendered directly. */
+html[data-theme='light'] svg text {
+  fill: currentColor;
 }
 
 /* Secondary + ghost buttons — these lean on tiny white-alpha backgrounds

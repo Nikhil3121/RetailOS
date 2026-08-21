@@ -135,9 +135,16 @@ class SaleService:
             price = item.unit_price if item.unit_price is not None else variant.selling_price
             gross = _round(price * item.quantity)
             disc_amt = _round(gross * (item.discount_pct / Decimal("100")))
-            net = _round(gross - disc_amt)
-            tax = _round(net * (product.tax_rate / Decimal("100")))
-            line_total = _round(net + tax)
+            # Tax-INCLUSIVE pricing (MS Mall + Indian textile convention):
+            # unit_price already carries the GST embedded. `line_total` is
+            # exactly what the customer pays. `subtotal` is the pre-tax base
+            # derived by dividing out (1 + tax_rate/100) — this keeps the tax
+            # amount honest for GST filing while showing the customer the
+            # printed-on-the-tag price at the counter.
+            line_total = _round(gross - disc_amt)
+            divisor = Decimal("1") + product.tax_rate / Decimal("100")
+            net = _round(line_total / divisor) if divisor != 0 else line_total
+            tax = _round(line_total - net)
 
             lines.append(
                 SaleLine(

@@ -102,6 +102,12 @@ function round(n: number): number {
 }
 
 function computeTotals(lines: BillLine[]): Totals {
+  // Tax-INCLUSIVE pricing. Backend does the same math (services/sale.py):
+  //   line_total = price × qty − discount     ← what customer pays
+  //   subtotal   = line_total / (1 + tax%)    ← pre-tax base (derived)
+  //   tax        = line_total − subtotal      ← embedded tax
+  // So the "Grand total" the operator sees at the counter equals the sum of
+  // (MRP × qty − discount) exactly — matches the tag price.
   let gross = 0;
   let discount = 0;
   let subtotal = 0;
@@ -110,8 +116,11 @@ function computeTotals(lines: BillLine[]): Totals {
     const price = Number(l.unit_price) || 0;
     const g = price * l.quantity;
     const d = g * (l.discount_pct / 100);
-    const net = g - d;
-    const t = net * ((Number(l.tax_rate) || 0) / 100);
+    const lineTotal = g - d;
+    const rate = Number(l.tax_rate) || 0;
+    const divisor = 1 + rate / 100;
+    const net = divisor !== 0 ? lineTotal / divisor : lineTotal;
+    const t = lineTotal - net;
     gross += g;
     discount += d;
     subtotal += net;
@@ -997,10 +1006,13 @@ export function Billing(): JSX.Element {
                   </thead>
                   <tbody>
                     {lines.map((l) => {
+                      // Tax-inclusive: the "total" column is just the
+                      // post-discount extended price — GST is already
+                      // embedded in unit_price and shown separately in
+                      // the totals card below.
                       const price = Number(l.unit_price) || 0;
                       const gross = price * l.quantity;
-                      const net = gross * (1 - l.discount_pct / 100);
-                      const total = net * (1 + (Number(l.tax_rate) || 0) / 100);
+                      const total = gross * (1 - l.discount_pct / 100);
                       return (
                         <tr
                           key={l.variant_id}
