@@ -193,6 +193,43 @@ html[data-theme='light'] svg text {
   fill: currentColor;
 }
 
+/* White text inside a glass card (KPI numbers, invoice hero) is invisible
+   on a white light-mode surface. Global `text-white` stays untouched (needed
+   for coloured buttons + colored badges); this scoped override only fires
+   when the text sits inside a translucent glass container. */
+html[data-theme='light'] .glass [class*='text-white'],
+html[data-theme='light'] .glass-strong [class*='text-white'] {
+  color: #101425 !important;
+}
+
+/* Pale accent-colour text (Online chip, session banner, delta chips, held-bills
+   pill) was designed for a dark background. On white they become invisible.
+   Bump them all to a darker shade that still reads as "green / amber / red". */
+html[data-theme='light'] [class*='text-emerald-100'],
+html[data-theme='light'] [class*='text-emerald-200'],
+html[data-theme='light'] [class*='text-emerald-300'] {
+  color: #047857 !important;   /* emerald-700 */
+}
+html[data-theme='light'] [class*='text-amber-100'],
+html[data-theme='light'] [class*='text-amber-200'],
+html[data-theme='light'] [class*='text-amber-300'] {
+  color: #b45309 !important;   /* amber-700 */
+}
+html[data-theme='light'] [class*='text-rose-100'],
+html[data-theme='light'] [class*='text-rose-200'],
+html[data-theme='light'] [class*='text-rose-300'] {
+  color: #be123c !important;   /* rose-700 */
+}
+html[data-theme='light'] [class*='text-cobalt-100'],
+html[data-theme='light'] [class*='text-cobalt-200'],
+html[data-theme='light'] [class*='text-cobalt-300'] {
+  color: #1637c4 !important;   /* cobalt-600 */
+}
+html[data-theme='light'] [class*='text-aurora-300'],
+html[data-theme='light'] [class*='text-aurora-400'] {
+  color: #0891b2 !important;   /* aurora-600 */
+}
+
 /* Secondary + ghost buttons — these lean on tiny white-alpha backgrounds
    (`bg-white/[0.04]`) that vanish on a light page. Flip to dark-alpha so
    the button itself is visible, and give the label solid contrast. */

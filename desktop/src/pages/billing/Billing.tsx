@@ -168,12 +168,25 @@ export function Billing(): JSX.Element {
   const activeStaff = (staffQuery.data?.items ?? []).filter(
     (u) => u.is_active,
   );
+  // Always refetch when Billing mounts (or the store changes) so a session
+  // just opened from the Day Session screen doesn't leave a stale "no session"
+  // banner behind. Cache-invalidation from that screen fires the refetch too,
+  // but this guarantees freshness even if the user navigates in the middle
+  // of an in-flight mutation.
   const sessionQuery = useQuery({
     queryKey: ['day-session', 'current', storeId],
     queryFn: () => currentSession(storeId),
     enabled: !!storeId,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
   const sessionOpen = sessionQuery.data && sessionQuery.data.status === 'open';
+  // `isLoading` is only true on the very first fetch; after that a refetch
+  // sets `isFetching`. If we only watch isLoading, an in-flight refresh
+  // shows the STALE "No open session" banner instead of a loader — which
+  // is exactly the "banner still appears after opening" symptom.
+  const sessionLoading = sessionQuery.isLoading || sessionQuery.isFetching;
 
   // -----------------------------------------------------------------------
   // Bill state
@@ -774,7 +787,7 @@ export function Billing(): JSX.Element {
             <SessionBanner
               hasStore={!!storeId}
               open={!!sessionOpen}
-              loading={sessionQuery.isLoading}
+              loading={sessionLoading}
             />
           </div>
         </div>
