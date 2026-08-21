@@ -23,6 +23,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPKMixin
@@ -67,6 +68,11 @@ class Product(UUIDPKMixin, TimestampMixin, Base):
     )
 
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # Raw row from legacy import (see migration 0014).
+    source_data: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"), nullable=True
+    )
 
     brand: Mapped["Brand | None"] = relationship("Brand", back_populates="products")
     category: Mapped["Category | None"] = relationship("Category", back_populates="products")
@@ -139,6 +145,11 @@ class ProductVariant(UUIDPKMixin, TimestampMixin, Base):
 
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # Raw row from legacy import (see migration 0014).
+    source_data: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"), nullable=True
+    )
 
 
 class ProductImage(UUIDPKMixin, TimestampMixin, Base):

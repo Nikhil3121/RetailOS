@@ -50,6 +50,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       type={type}
       disabled={disabled || loading}
+      // data-variant is a stable hook for scoped theme overrides (see
+      // index.css `html[data-theme="light"] button[data-variant="…"]`).
+      // Without it, light-mode has no way to target variant-specific styles
+      // and secondary/ghost buttons render white-on-white.
+      data-variant={variant}
       className={cn(
         'inline-flex items-center justify-center gap-2 rounded-xl font-medium tracking-tight transition-colors',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cobalt-400',

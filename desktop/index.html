@@ -4,13 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!--
-      Strict CSP for the renderer. Vite's HMR needs 'unsafe-inline' for its runtime
-      style injection in dev; the production build tightens this in a later milestone
-      via a build-time transform.
+      CSP for the renderer. `connect-src` is deliberately permissive across
+      HTTP/S/WS so the app can talk to whatever backend URL the operator
+      configures via VITE_API_BASE_URL (localhost in dev, a LAN IP in a
+      single-mall install, or a hosted URL in cloud deployments). Everything
+      else (scripts, styles, fonts) stays locked to 'self' — the app never
+      loads third-party JS, so this is safe under Electron.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:8000 http://localhost:8000 ws://localhost:5173 http://localhost:5173;"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' http: https: ws: wss:;"
     />
     <title>RetailOS</title>
   </head>

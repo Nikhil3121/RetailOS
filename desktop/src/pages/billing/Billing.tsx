@@ -49,8 +49,13 @@ import {
   type QueuedBill,
 } from '@/lib/offline-bills';
 import { useAuthStore } from '@/stores/auth-store';
+import { useHotkey } from '@/lib/hotkeys';
+import { HeldBillsPanel, type HeldBillSnapshot } from './HeldBillsPanel';
 
 const LAST_STORE_KEY = 'retailos.billing.last_store_id';
+// Persisted queue of bills the operator has parked to serve another customer.
+// Kept in localStorage (offline-first) — no backend involvement in this phase.
+const HELD_BILLS_KEY = 'retailos.held-bills.v1';
 
 interface BillLine {
   variant_id: string;
@@ -171,6 +176,49 @@ export function Billing(): JSX.Element {
   const [staffLookupError, setStaffLookupError] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
 
+  // Short-lived on-screen confirmation used by F3 Hold Bill. Auto-clears in
+  // an effect below so we don't need a full toast system for one message.
+  const [flash, setFlash] = useState<{ kind: 'info' | 'success'; text: string } | null>(null);
+  useEffect(() => {
+    if (!flash) return;
+    const t = window.setTimeout(() => setFlash(null), 2500);
+    return () => window.clearTimeout(t);
+  }, [flash]);
+
+  // Held-bills UI — a pill in the header + a slide-in panel opened by
+  // Shift+F3 (F3 alone parks the current cart). We keep a small mirror
+  // count in state so the pill updates the instant a bill is held or
+  // resumed, without waiting for the panel to open.
+  const [heldOpen, setHeldOpen] = useState(false);
+  const [heldCount, setHeldCount] = useState<number>(() => {
+    try {
+      const raw = window.localStorage.getItem(HELD_BILLS_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.length : 0;
+    } catch {
+      return 0;
+    }
+  });
+  // Refresh count when the panel closes (in case rows were discarded there)
+  // and on the cross-tab `storage` event.
+  useEffect(() => {
+    function refresh(): void {
+      try {
+        const raw = window.localStorage.getItem(HELD_BILLS_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        setHeldCount(Array.isArray(parsed) ? parsed.length : 0);
+      } catch {
+        setHeldCount(0);
+      }
+    }
+    refresh();
+    function onStorage(e: StorageEvent): void {
+      if (e.key === HELD_BILLS_KEY) refresh();
+    }
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [heldOpen, flash]);
+
   // -----------------------------------------------------------------------
   // Offline queue — bills stashed in localStorage when the network is down.
   //  · `online` tracks navigator.onLine + browser events.
@@ -266,7 +314,13 @@ export function Billing(): JSX.Element {
   // -----------------------------------------------------------------------
   // Product picker
   // -----------------------------------------------------------------------
+  // Server-side search: instead of pre-loading 200 products and filtering
+  // client-side (which quietly hid every SKU outside that window), the
+  // picker now debounces the input by 250ms and asks the backend to
+  // search across ALL 9k+ products. Matches on name / HSN / SKU / barcode
+  // — see ProductService.list() for the OR/EXISTS clause.
   const [q, setQ] = useState('');
+  const [debouncedQ, setDebouncedQ] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -274,19 +328,34 @@ export function Billing(): JSX.Element {
     searchRef.current?.focus();
   }, []);
 
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQ(q.trim()), 250);
+    return () => window.clearTimeout(t);
+  }, [q]);
+
+  // First page = "recently added". Any subsequent query hits the server
+  // with the search text; 30 rows is enough to fit the picker dropdown
+  // without a scrollbar.
   const summariesQuery = useQuery({
-    queryKey: ['products', 'billing'],
-    queryFn: () => listProducts({ page_size: 200, is_active: true }),
+    queryKey: ['products', 'billing', debouncedQ],
+    queryFn: () =>
+      listProducts({
+        page_size: 30,
+        is_active: true,
+        search: debouncedQ || undefined,
+      }),
+    placeholderData: (prev) => prev, // keep old rows visible while new ones fetch
   });
 
+  // Fan out getProduct() per matched summary to pull variants. Limited to
+  // 30 products max per query so the network cost stays bounded even when
+  // the search is broad (e.g. "COTTON" returning 387 rows — we cap at 30).
   const variantsQuery = useQuery({
-    queryKey: ['variants', 'billing', summariesQuery.data?.items.map((s) => s.id)],
+    queryKey: ['variants', 'billing', debouncedQ, summariesQuery.data?.items.map((s) => s.id)],
     enabled: !!summariesQuery.data,
     queryFn: async (): Promise<PickerVariant[]> => {
       const summaries = summariesQuery.data?.items ?? [];
-      // Fan the per-product fetches out in parallel. `allSettled` means one
-      // 404 or 500 on a single product doesn't blank the whole picker —
-      // the good ones still land.
+      // `allSettled` so a single 404/500 doesn't blank the whole picker.
       const results = await Promise.allSettled(
         summaries.map((s) => getProduct(s.id)),
       );
@@ -309,22 +378,32 @@ export function Billing(): JSX.Element {
       }
       return out;
     },
+    placeholderData: (prev) => prev,
   });
 
   const variants = variantsQuery.data ?? [];
 
+  // The server already matched on the query; do a last-mile client filter
+  // so an exact SKU/barcode scan wins even when the product has many
+  // variants (e.g. same SKU across sizes).
   const filtered = useMemo(() => {
-    const query = q.trim().toLowerCase();
+    const query = debouncedQ.toLowerCase();
     if (!query) return variants.slice(0, 30);
+    // If any variant matches the query exactly on SKU/barcode, show only
+    // those (scanner precision). Otherwise fall back to fuzzy contains.
+    const exact = variants.filter(
+      (v) => v.sku.toLowerCase() === query || (v.barcode ?? '').toLowerCase() === query,
+    );
+    if (exact.length > 0) return exact;
     return variants
       .filter((v) => {
         const hay = `${v.product_name} ${v.variant_name} ${v.sku} ${v.barcode ?? ''}`.toLowerCase();
         return hay.includes(query);
       })
       .slice(0, 30);
-  }, [q, variants]);
+  }, [debouncedQ, variants]);
 
-  useEffect(() => setActiveIdx(0), [q]);
+  useEffect(() => setActiveIdx(0), [debouncedQ]);
 
   // Scanner UX: track focus so the "Scanner ready" chip goes green, and
   // remember the last item added so we can flash confirmation in the picker.
@@ -440,6 +519,87 @@ export function Billing(): JSX.Element {
     },
   });
 
+  /**
+   * Park the current cart as a "held" bill so the counter can serve a
+   * different customer, then resume this one later. Snapshot lives in
+   * localStorage — no backend round-trip, works offline.
+   */
+  function onHold(): void {
+    if (lines.length === 0) {
+      setFlash({ kind: 'info', text: 'Nothing to hold — cart is empty.' });
+      return;
+    }
+    const snapshot = {
+      id:
+        typeof window.crypto?.randomUUID === 'function'
+          ? window.crypto.randomUUID()
+          : `held-${Date.now()}`,
+      held_at: new Date().toISOString(),
+      store_id: storeId,
+      customer_id: customerId || null,
+      salesperson_id: salespersonId || null,
+      notes,
+      lines,
+    };
+    let prev: unknown[] = [];
+    try {
+      prev = JSON.parse(window.localStorage.getItem(HELD_BILLS_KEY) ?? '[]');
+      if (!Array.isArray(prev)) prev = [];
+    } catch {
+      prev = [];
+    }
+    window.localStorage.setItem(HELD_BILLS_KEY, JSON.stringify([...prev, snapshot]));
+    setLines([]);
+    setNotes('');
+    setFlash({ kind: 'success', text: `Bill held. ${prev.length + 1} bill(s) on hold.` });
+  }
+
+  /**
+   * Restore a held snapshot back into the current cart. Called when the
+   * operator picks a bill in HeldBillsPanel. The panel has already removed
+   * the snapshot from storage, so there's nothing to clean up here.
+   * Any lines currently on the cart are appended to the incoming lines —
+   * we never silently discard operator work.
+   */
+  function onResumeHeld(snap: HeldBillSnapshot): void {
+    const restoredLines = (snap.lines as BillLine[]) ?? [];
+    setLines((current) => (current.length ? [...restoredLines, ...current] : restoredLines));
+    if (snap.customer_id) setCustomerId(snap.customer_id);
+    if (snap.salesperson_id) setSalespersonId(snap.salesperson_id);
+    if (snap.notes) setNotes(snap.notes);
+    setFlash({ kind: 'success', text: 'Bill resumed.' });
+  }
+
+  /**
+   * F10 print handler. Behaviour matches shopkeeper expectation from Richie /
+   * Marg: if the current cart has items, F10 is equivalent to "save + print"
+   * (same path as F7 / the primary button, which already prints on success).
+   * If the cart is empty, tell the operator instead of opening a print dialog
+   * for the app chrome — that's confusing.
+   */
+  function onPrint(): void {
+    if (lines.length === 0) {
+      setFlash({ kind: 'info', text: 'Nothing to print — cart is empty.' });
+      return;
+    }
+    onSave();
+  }
+
+  // Screen-local shortcuts — the "why" for each key:
+  //   F7       = Save Bill (Marg convention: save + print in one action)
+  //   F10      = Print — saves the current cart, receipt prints after success
+  //   F3       = Hold Bill  (park cart, serve next customer, resume later)
+  //   Shift+F3 = open the Held Bills panel to resume one
+  useHotkey('F7', () => onSave());
+  useHotkey('F10', () => onPrint());
+  useHotkey('F3', (e) => {
+    if (e.shiftKey) {
+      setHeldOpen(true);
+    } else {
+      onHold();
+    }
+  });
+
   function onSave(): void {
     setError(null);
     if (!storeId) {
@@ -520,16 +680,56 @@ export function Billing(): JSX.Element {
 
   return (
     <div className="space-y-4">
+      {/* F3 Hold Bill flash — fixed to the viewport so it doesn't shift layout. */}
+      {flash && (
+        <div
+          className={cn(
+            'pointer-events-none fixed bottom-6 right-6 z-50 rounded-xl px-4 py-2.5 text-sm font-medium shadow-glass-lg backdrop-blur-xl',
+            flash.kind === 'success'
+              ? 'bg-emerald-500/15 text-emerald-200 border border-emerald-400/30'
+              : 'bg-white/10 text-slate-200 border border-border',
+          )}
+          role="status"
+          aria-live="polite"
+        >
+          {flash.text}
+        </div>
+      )}
       <PageHeader
         title="Billing"
-        description="Ring up a sale, print a bill, and save any unpaid balance as due — collect it later from Billing → Outstanding."
+        description="Ring up a sale, print a bill, and save any unpaid balance as due — collect it later from Billing → Outstanding. Shortcuts: F2 new · F7 save · F10 print · F3 hold · Shift+F3 resume · F9 today's bills."
         actions={
-          <ConnectionChip
-            online={online}
-            queuedCount={queued.length}
-            syncing={syncing}
-            onSync={syncNow}
-          />
+          <div className="flex items-center gap-2">
+            {/* Held-bills pill: shown whenever there's at least one parked
+                bill so the operator can never forget about them. Click or
+                press Shift+F3 to open the resume panel. */}
+            {heldCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setHeldOpen(true)}
+                className="flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-200 transition hover:border-amber-400/70 hover:bg-amber-500/20"
+                title="Resume a held bill (Shift+F3)"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                Held: {heldCount}
+              </button>
+            )}
+            <ConnectionChip
+              online={online}
+              queuedCount={queued.length}
+              syncing={syncing}
+              onSync={syncNow}
+            />
+          </div>
+        }
+      />
+      <HeldBillsPanel
+        storageKey={HELD_BILLS_KEY}
+        open={heldOpen}
+        onClose={() => setHeldOpen(false)}
+        onResume={onResumeHeld}
+        resolveCustomerName={(id) =>
+          id ? customersQuery.data?.items.find((c) => c.id === id)?.name : undefined
         }
       />
 

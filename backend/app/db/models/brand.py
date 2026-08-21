@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, String, UniqueConstraint
+from sqlalchemy import Boolean, JSON, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPKMixin
@@ -22,5 +23,11 @@ class Brand(UUIDPKMixin, TimestampMixin, Base):
     description: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     logo_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # Raw row from a legacy import source (e.g. Richie Retail's MARKA table).
+    # NULL for rows created inside RetailOS. See migration 0014.
+    source_data: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"), nullable=True
+    )
 
     products: Mapped[list["Product"]] = relationship("Product", back_populates="brand")

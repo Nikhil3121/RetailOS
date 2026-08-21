@@ -153,7 +153,7 @@ export function Products(): JSX.Element {
       <div className="glass flex flex-wrap items-end gap-3 p-4">
         <div className="min-w-[240px] flex-1">
           <Input
-            placeholder="Search by name"
+            placeholder="Search by name, SKU, barcode, or HSN"
             leadingIcon={<Search className="h-4 w-4" />}
             value={search}
             onChange={(e) => setSearch(e.target.value)}

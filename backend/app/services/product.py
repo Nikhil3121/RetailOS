@@ -15,7 +15,7 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -98,8 +98,30 @@ class ProductService:
 
         base = select(Product)
         if search:
+            # Match on any field a shopkeeper is likely to type into the
+            # search box: product name, HSN code, or the variant's SKU /
+            # barcode. Scanner input lands as the raw barcode string;
+            # numeric SKUs like "300100" are how staff refer to items in
+            # the daily bill flow.
             like = f"%{search.strip()}%"
-            base = base.where(Product.name.ilike(like))
+            variant_hit = (
+                select(ProductVariant.id)
+                .where(
+                    ProductVariant.product_id == Product.id,
+                    or_(
+                        ProductVariant.sku.ilike(like),
+                        ProductVariant.barcode.ilike(like),
+                    ),
+                )
+                .exists()
+            )
+            base = base.where(
+                or_(
+                    Product.name.ilike(like),
+                    Product.hsn_code.ilike(like),
+                    variant_hit,
+                )
+            )
         if category_id is not None:
             base = base.where(Product.category_id == category_id)
         if brand_id is not None:

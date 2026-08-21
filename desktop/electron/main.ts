@@ -33,7 +33,7 @@ async function createMainWindow(): Promise<void> {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      devTools: isDev,
+      devTools: true,   // enabled in packaged builds so cashiers/support can debug
     },
   });
 
@@ -58,7 +58,22 @@ async function createMainWindow(): Promise<void> {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     await mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    // Auto-open DevTools on packaged launch — makes it easy to diagnose
+    // "unable to reach server" and similar issues from any Windows PC.
+    // Remove this line once we're happy the app is stable in production.
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
+
+  // Register global keyboard shortcuts so F12 / Ctrl+Shift+I always work,
+  // even if the menu bar is hidden.
+  mainWindow.webContents.on('before-input-event', (_event, input) => {
+    const isToggleDevTools =
+      input.key === 'F12' ||
+      (input.control && input.shift && input.key.toLowerCase() === 'i');
+    if (isToggleDevTools) {
+      mainWindow?.webContents.toggleDevTools();
+    }
+  });
 }
 
 app.whenReady().then(createMainWindow).catch((err) => {

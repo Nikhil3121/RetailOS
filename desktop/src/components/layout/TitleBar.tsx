@@ -2,6 +2,7 @@ import { Sparkles } from 'lucide-react';
 
 import { HealthIndicator } from '@/components/ui/HealthIndicator';
 import { NotificationBell } from './NotificationBell';
+import { ThemeToggle } from './ThemeToggle';
 import { UserMenu } from './UserMenu';
 
 /**
@@ -21,6 +22,7 @@ export function TitleBar(): JSX.Element {
       </div>
       <div className="titlebar-no-drag flex items-center gap-3">
         <HealthIndicator />
+        <ThemeToggle />
         <NotificationBell />
         <UserMenu />
       </div>

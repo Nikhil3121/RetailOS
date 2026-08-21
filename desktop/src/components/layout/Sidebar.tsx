@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   Activity,
@@ -99,12 +100,27 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Settings', to: '/settings', icon: Settings },
 ];
 
+/**
+ * Return every NAV_ITEM sorted A→Z by label, ignoring the original section
+ * groupings. Section headers are dropped — one clean flat list is what the
+ * shopkeeper asked for so they don't have to remember which category a
+ * screen lives under.
+ */
+function flattenAndSort(items: readonly NavItem[]): NavItem[] {
+  return [...items]
+    .map(({ section: _section, ...rest }) => rest)
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export function Sidebar(): JSX.Element {
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
   const toggle = useUIStore((s) => s.toggleSidebar);
   const hasMinRole = useAuthStore((s) => s.hasMinRole);
 
-  const visible = NAV_ITEMS.filter((i) => !i.minRole || hasMinRole(i.minRole));
+  // Sort once at module boot (NAV_ITEMS is constant), then filter by role on
+  // every render so RBAC changes reflect immediately.
+  const sorted = useMemo(() => flattenAndSort(NAV_ITEMS), []);
+  const visible = sorted.filter((i) => !i.minRole || hasMinRole(i.minRole));
 
   return (
     <aside
@@ -115,14 +131,7 @@ export function Sidebar(): JSX.Element {
     >
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
         {visible.map((item) => (
-          <div key={item.to}>
-            {item.section && !collapsed && (
-              <div className="mb-1 mt-4 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
-                {item.section}
-              </div>
-            )}
-            <SidebarLink item={item} collapsed={collapsed} />
-          </div>
+          <SidebarLink key={item.to} item={item} collapsed={collapsed} />
         ))}
       </nav>
 

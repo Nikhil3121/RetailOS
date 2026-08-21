@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
-from sqlalchemy import Boolean, Date, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, JSON, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, UUIDPKMixin
@@ -36,3 +38,9 @@ class Customer(UUIDPKMixin, TimestampMixin, Base):
 
     notes: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # Raw row from legacy import — Richie fields with no direct home in RetailOS
+    # (spouse_name, loyalty_card_no, caste, etc.) live here. See migration 0014.
+    source_data: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"), nullable=True
+    )

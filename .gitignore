@@ -18,6 +18,7 @@ coverage.xml
 node_modules/
 dist/
 dist-electron/
+release/
 out/
 .vite/
 *.log

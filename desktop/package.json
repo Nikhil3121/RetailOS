@@ -12,12 +12,13 @@
     "dev": "concurrently -k -n vite,electron -c cyan,magenta \"vite\" \"wait-on http://localhost:5173 && node scripts/build-electron-main.mjs && electron .\"",
     "build:renderer": "tsc --noEmit && vite build",
     "build:electron": "node scripts/build-electron-main.mjs",
-    "build": "pnpm build:renderer && pnpm build:electron",
+    "build": "npm run build:renderer && npm run build:electron",
     "preview": "vite preview",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit && tsc -p electron/tsconfig.json --noEmit",
     "dist": "npm run build && electron-builder --publish never",
-    "dist:win": "npm run build && electron-builder --win --publish never"
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist:portable": "npm run build && electron-builder --win --dir --publish never"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.0",

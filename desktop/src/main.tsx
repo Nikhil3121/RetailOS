@@ -14,6 +14,13 @@ import { router } from '@/router';
 
 import '@/styles/index.css';
 
+// Apply the persisted theme BEFORE React mounts, so a saved light-mode
+// preference doesn't flash the dark palette on every reload. Kept inline
+// here (not in a helper) so it runs synchronously ahead of the first paint.
+if (window.localStorage.getItem('retailos.theme') === 'light') {
+  document.documentElement.setAttribute('data-theme', 'light');
+}
+
 const container = document.getElementById('root');
 if (!container) throw new Error('#root element not found in index.html');
 

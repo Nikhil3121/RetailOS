@@ -10,7 +10,10 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, UniqueConstraint, Uuid
+from typing import Any
+
+from sqlalchemy import Boolean, ForeignKey, Integer, JSON, String, UniqueConstraint, Uuid
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPKMixin
@@ -46,5 +49,10 @@ class Category(UUIDPKMixin, TimestampMixin, Base):
 
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # Raw row from legacy import (see migration 0014).
+    source_data: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"), nullable=True
+    )
 
     products: Mapped[list["Product"]] = relationship("Product", back_populates="category")

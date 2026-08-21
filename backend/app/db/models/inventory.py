@@ -11,7 +11,10 @@ import uuid
 from decimal import Decimal
 from enum import Enum
 
-from sqlalchemy import ForeignKey, Numeric, String, TypeDecorator, UniqueConstraint, Uuid
+from typing import Any
+
+from sqlalchemy import ForeignKey, JSON, Numeric, String, TypeDecorator, UniqueConstraint, Uuid
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPKMixin
@@ -92,6 +95,11 @@ class StockMovement(UUIDPKMixin, TimestampMixin, Base):
         Uuid(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
+    )
+
+    # Raw row from legacy import (see migration 0014).
+    source_data: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"), nullable=True
     )
 
     variant: Mapped[ProductVariant] = relationship("ProductVariant")
