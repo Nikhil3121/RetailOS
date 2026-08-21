@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
   Banknote,
@@ -187,6 +187,40 @@ export function Billing(): JSX.Element {
   // shows the STALE "No open session" banner instead of a loader — which
   // is exactly the "banner still appears after opening" symptom.
   const sessionLoading = sessionQuery.isLoading || sessionQuery.isFetching;
+
+  // Auto-select the store with an open day session.
+  // Reason: if the operator opens a session for MS MALL 2, then comes to
+  // Billing, the store selector previously defaulted to whatever was in
+  // localStorage (often the other branch), which showed a confusing
+  // "No open session" banner. Now we peek at every store's current
+  // session and, if the CURRENT storeId has no open session but exactly
+  // one OTHER store does, we silently switch to that store. Only fires
+  // once per mount so the operator can still manually override.
+  const allStores = storesQuery.data?.items ?? [];
+  const openSessionProbes = useQueries({
+    queries: allStores.map((s) => ({
+      queryKey: ['day-session', 'current', s.id],
+      queryFn: () => currentSession(s.id),
+      staleTime: 0,
+      refetchOnMount: 'always' as const,
+    })),
+  });
+  const storeIdsWithOpenSession = allStores
+    .map((s, i) => (openSessionProbes[i]?.data?.status === 'open' ? s.id : null))
+    .filter((x): x is string => !!x);
+  const autoSwitchedRef = useRef(false);
+  useEffect(() => {
+    if (autoSwitchedRef.current) return;
+    // Wait until all probes have resolved so we don't switch prematurely.
+    if (openSessionProbes.some((q) => q.isLoading)) return;
+    // Current store already has an open session — nothing to do.
+    if (storeIdsWithOpenSession.includes(storeId)) return;
+    // Exactly one other store has an open session — pick it.
+    if (storeIdsWithOpenSession.length === 1) {
+      autoSwitchedRef.current = true;
+      setStoreId(storeIdsWithOpenSession[0]);
+    }
+  }, [openSessionProbes, storeId, storeIdsWithOpenSession]);
 
   // -----------------------------------------------------------------------
   // Bill state
