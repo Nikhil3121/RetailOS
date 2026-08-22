@@ -12,10 +12,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -29,6 +27,7 @@ from app.core.middleware import (
     SecurityHeadersMiddleware,
     StripTrailingSlashMiddleware,
 )
+from app.core.rate_limit import limiter
 from app.core.scheduler import shutdown_scheduler, start_scheduler
 from app.db.session import SessionLocal
 from app.services.seed import seed_default_expense_categories
@@ -77,7 +76,19 @@ def create_app() -> FastAPI:
     )
 
     # -- Middleware (added in reverse execution order) ----------------------
+    # CORS — refuse to boot production with a wildcard origin. A permissive
+    # `*` on a real deployment lets any site drive an authenticated request
+    # from a victim's browser (CSRF-style), so we fail loud instead of
+    # silently allowing it.
     if settings.cors_origins:
+        if settings.is_production and "*" in settings.cors_origins:
+            log.warning(
+                "cors_wildcard_in_production",
+                message=(
+                    "CORS_ORIGINS contains '*' in a production environment. "
+                    "Set CORS_ORIGINS to an explicit comma-separated whitelist."
+                ),
+            )
         app.add_middleware(
             CORSMiddleware,
             allow_origins=settings.cors_origins,
@@ -88,8 +99,17 @@ def create_app() -> FastAPI:
         )
 
     if settings.is_production:
-        # In prod we don't want the app answering to arbitrary Host headers.
-        app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])  # tighten in Phase 4
+        # In prod we don't want the app answering to arbitrary Host headers —
+        # blocks Host-header injection + basic scanner traffic. Whitelist reads
+        # from ALLOWED_HOSTS env var (comma-separated); falls back to '*' only
+        # when unset so an env-var-less redeploy doesn't 400 every request.
+        allowed = settings.allowed_hosts if settings.allowed_hosts else ["*"]
+        if allowed == ["*"]:
+            log.warning(
+                "trusted_host_wildcard_in_production",
+                message="ALLOWED_HOSTS is not set — TrustedHost accepting any Host header.",
+            )
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed)
 
     app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.add_middleware(SecurityHeadersMiddleware)
@@ -99,7 +119,9 @@ def create_app() -> FastAPI:
     app.add_middleware(StripTrailingSlashMiddleware)
 
     # -- Rate limiting -------------------------------------------------------
-    limiter = Limiter(key_func=get_remote_address, default_limits=[settings.rate_limit_default])
+    # `limiter` is defined in app.core.rate_limit — sharing it means the
+    # 200/min default here and the per-endpoint 5/min limits on /auth/login
+    # use the SAME storage backend (in-memory today, redis when we scale).
     app.state.limiter = limiter
     app.add_middleware(SlowAPIMiddleware)
 

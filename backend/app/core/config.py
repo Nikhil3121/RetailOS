@@ -81,6 +81,12 @@ class Settings(BaseSettings):
     # runs — otherwise a plain comma-separated env value would be rejected on load.
     cors_origins: Annotated[list[str], NoDecode, Field(default_factory=list)]
 
+    # -- Trusted hosts -------------------------------------------------------
+    # Comma-separated list of Host headers the app will answer to in
+    # production (e.g. retailos-backend-8jwi.onrender.com). Unset = fall back
+    # to '*' with a boot warning. Same parsing as cors_origins.
+    allowed_hosts: Annotated[list[str], NoDecode, Field(default_factory=list)]
+
     # -- Rate limiting -------------------------------------------------------
     rate_limit_default: str = "200/minute"
 
@@ -103,10 +109,14 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # Validators & derived helpers
     # ------------------------------------------------------------------
-    @field_validator("cors_origins", mode="before")
+    @field_validator("cors_origins", "allowed_hosts", mode="before")
     @classmethod
-    def _split_cors(cls, v: str | list[str]) -> list[str]:
-        """Accept either a JSON array or a comma-separated string in the env file."""
+    def _split_csv(cls, v: str | list[str]) -> list[str]:
+        """Accept either a JSON array or a comma-separated string in the env file.
+
+        Shared by `cors_origins` and `allowed_hosts` — both are lists of hostnames
+        or origins delivered by env vars, so the parsing rule is identical.
+        """
         if isinstance(v, str):
             v = v.strip()
             if not v:

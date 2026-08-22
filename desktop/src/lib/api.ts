@@ -100,6 +100,12 @@ async function waitForAuthHydration(timeoutMs = 3000): Promise<void> {
 // coalesce onto a single /auth/refresh network call.
 let inFlightRefresh: Promise<boolean> | null = null;
 
+// Vite exposes DEV = true for `npm run dev`, false for `npm run build`.
+// Every debug log below is gated on DEBUG so a production Electron build
+// never leaks bearer tokens / payload bodies through log-capture tools.
+// Flip to `true` here manually if you need a one-off prod trace.
+const DEBUG = import.meta.env.DEV;
+
 async function attempt<T>({
   path,
   body,
@@ -137,19 +143,21 @@ async function attempt<T>({
   const url = `${API_V1}${path}`;
 
   // ====================================================
-  // REQUEST DEBUG
+  // REQUEST DEBUG (dev-only)
   // ====================================================
 
-  console.groupCollapsed(
-    `%cAPI REQUEST`,
-    'color:#00d4ff;font-weight:bold;',
-  );
+  if (DEBUG) {
+    console.groupCollapsed(
+      `%cAPI REQUEST`,
+      'color:#00d4ff;font-weight:bold;',
+    );
 
-  console.log('URL:', url);
-  console.log('METHOD:', init.method ?? 'GET');
-  console.log('BODY:', body);
+    console.log('URL:', url);
+    console.log('METHOD:', init.method ?? 'GET');
+    console.log('BODY:', body);
 
-  console.groupEnd();
+    console.groupEnd();
+  }
 
   const response = await rawFetch(url, {
     ...init,
@@ -179,13 +187,15 @@ async function attempt<T>({
   });
 
   if (response.status === 204) {
-    console.groupCollapsed(
-      '%cAPI RESPONSE',
-      'color:#22c55e;font-weight:bold;',
-    );
-    console.log('STATUS:', 204);
-    console.log('No Content');
-    console.groupEnd();
+    if (DEBUG) {
+      console.groupCollapsed(
+        '%cAPI RESPONSE',
+        'color:#22c55e;font-weight:bold;',
+      );
+      console.log('STATUS:', 204);
+      console.log('No Content');
+      console.groupEnd();
+    }
 
     return undefined as T;
   }
@@ -200,20 +210,22 @@ async function attempt<T>({
     : undefined;
 
   // ====================================================
-  // RESPONSE DEBUG
+  // RESPONSE DEBUG (dev-only)
   // ====================================================
 
-  console.groupCollapsed(
-    `%cAPI RESPONSE`,
-    response.ok
-      ? 'color:#22c55e;font-weight:bold;'
-      : 'color:#ef4444;font-weight:bold;',
-  );
+  if (DEBUG) {
+    console.groupCollapsed(
+      `%cAPI RESPONSE`,
+      response.ok
+        ? 'color:#22c55e;font-weight:bold;'
+        : 'color:#ef4444;font-weight:bold;',
+    );
 
-  console.log('STATUS:', response.status);
-  console.log('PAYLOAD:', payload);
+    console.log('STATUS:', response.status);
+    console.log('PAYLOAD:', payload);
 
-  console.groupEnd();
+    console.groupEnd();
+  }
 
   if (!response.ok) {
     const envelope: ApiErrorEnvelope =

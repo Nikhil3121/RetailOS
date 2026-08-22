@@ -1,6 +1,5 @@
-import { Sparkles } from 'lucide-react';
-
 import { HealthIndicator } from '@/components/ui/HealthIndicator';
+import { Logo } from '@/components/ui/Logo';
 import { NotificationBell } from './NotificationBell';
 import { ThemeToggle } from './ThemeToggle';
 import { UserMenu } from './UserMenu';
@@ -14,11 +13,11 @@ import { UserMenu } from './UserMenu';
 export function TitleBar(): JSX.Element {
   return (
     <header className="titlebar-drag relative z-[9999] flex h-11 shrink-0 items-center justify-between border-b border-border/60 bg-ink-900/70 px-4 backdrop-blur-xl">
-      <div className="flex items-center gap-2 text-sm font-medium tracking-wide text-slate-300">
-        <span className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-cobalt-500 to-cobalt-800 shadow-glow">
-          <Sparkles className="h-3.5 w-3.5 text-white" />
+      <div className="flex items-center gap-2 text-sm font-medium tracking-tight text-slate-300">
+        <Logo size={24} />
+        <span>
+          Retail<span className="font-bold text-white">OS</span>
         </span>
-        <span>RetailOS</span>
       </div>
       <div className="titlebar-no-drag flex items-center gap-3">
         <HealthIndicator />

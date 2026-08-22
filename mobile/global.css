@@ -1,0 +1,8 @@
+/* NativeWind's entry stylesheet. Tailwind directives are transformed at
+ * build time by the NativeWind Metro plugin — RN doesn't parse CSS at
+ * runtime. Custom classes belong in tailwind.config.js `theme.extend`,
+ * NOT here.
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

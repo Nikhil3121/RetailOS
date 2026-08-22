@@ -1,0 +1,46 @@
+{
+  "//": "EAS Build profiles. Each `build` profile is a recipe passed to `eas build --profile <name>`. Docs: https://docs.expo.dev/build/eas-json/",
+  "cli": {
+    "version": ">= 7.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "//development": "For daily development — installs a debug client on your phone that connects to a Metro dev server. Replaces Expo Go for anything Expo Go can't run (Bluetooth, background tasks, custom native modules).",
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleDebug"
+      },
+      "channel": "development"
+    },
+
+    "//preview": "For internal QA — a signed release APK that behaves like production but is distributed via a shareable link (not Play Store). Install directly on the mall's tablet during closed testing.",
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "channel": "preview"
+    },
+
+    "//production": "For Play Store submission — an Android App Bundle (AAB, not APK). Google requires AAB. Do NOT install this directly; go through Play Console.",
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "channel": "production",
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "//production": "One-command Play Store submission after a production build finishes. Requires a Google service-account JSON path — see SIGNING_KEYSTORE.md.",
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "track": "internal"
+      }
+    }
+  }
+}

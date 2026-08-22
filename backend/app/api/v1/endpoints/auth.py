@@ -11,6 +11,7 @@ from fastapi import APIRouter, Request, status
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import get_settings
+from app.core.rate_limit import limiter as _auth_limiter
 from app.services.audit import AuditService
 from app.schemas.auth import (
     ChangePasswordRequest,
@@ -36,8 +37,14 @@ from app.services.two_factor import TwoFactorService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+# _auth_limiter is the SHARED app.core.rate_limit.limiter (imported above).
+# Decorating a route with `_auth_limiter.limit("5/minute")` overrides the
+# app-wide default (200/min) for that endpoint. Keyed by client IP so a
+# stolen password can't be sprayed against 10k users from one attacker box.
+
 
 @router.post("/login", response_model=LoginResponse, summary="Exchange credentials for a token pair")
+@_auth_limiter.limit("5/minute")
 async def login(payload: LoginRequest, db: DbSession, request: Request) -> LoginResponse:
     service = AuthService(db)
     user = await service.authenticate(email=payload.email, password=payload.password)
@@ -69,6 +76,7 @@ async def login(payload: LoginRequest, db: DbSession, request: Request) -> Login
     response_model=LoginResponse,
     summary="Second step of a 2FA-gated login — exchange challenge + code for tokens",
 )
+@_auth_limiter.limit("5/minute")
 async def login_2fa(
     payload: TwoFactorLoginRequest, db: DbSession, request: Request
 ) -> LoginResponse:
@@ -90,7 +98,12 @@ async def login_2fa(
 
 
 @router.post("/refresh", response_model=TokenPair, summary="Rotate an active refresh token")
-async def refresh(payload: RefreshRequest, db: DbSession) -> TokenPair:
+@_auth_limiter.limit("30/minute")
+async def refresh(payload: RefreshRequest, request: Request, db: DbSession) -> TokenPair:
+    # Refresh is called more often than login (every 30 min per active user)
+    # so its ceiling is 30/min per IP — enough headroom for a shop with 5
+    # counters on one router, tight enough to shut down a stolen-token
+    # replay attempt.
     service = AuthService(db)
     return await service.refresh(refresh_token=payload.refresh_token)
 
@@ -141,7 +154,13 @@ async def change_password(
     response_model=ForgotPasswordResponse,
     summary="Request a password reset token",
 )
-async def forgot_password(payload: ForgotPasswordRequest, db: DbSession) -> ForgotPasswordResponse:
+@_auth_limiter.limit("3/minute")
+async def forgot_password(
+    payload: ForgotPasswordRequest, request: Request, db: DbSession
+) -> ForgotPasswordResponse:
+    # Tighter still — a forgot-password endpoint doubles as an email
+    # enumeration oracle. 3/min per IP is comfortable for a legitimate user
+    # who typoed their email, punishing for anyone scripting the endpoint.
     service = AuthService(db)
     token = await service.request_password_reset(email=payload.email)
 
@@ -159,7 +178,10 @@ async def forgot_password(payload: ForgotPasswordRequest, db: DbSession) -> Forg
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Consume a reset token to set a new password",
 )
-async def reset_password(payload: ResetPasswordRequest, db: DbSession) -> None:
+@_auth_limiter.limit("5/minute")
+async def reset_password(
+    payload: ResetPasswordRequest, request: Request, db: DbSession
+) -> None:
     service = AuthService(db)
     await service.reset_password(
         reset_token=payload.reset_token,

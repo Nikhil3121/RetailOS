@@ -1,0 +1,68 @@
+{
+  "expo": {
+    "name": "RetailOS",
+    "slug": "retailos-mobile",
+    "scheme": "retailos",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#05070d",
+    "primaryColor": "#6366f1",
+
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "RetailOS needs the camera to scan product barcodes at the counter."
+        }
+      ],
+      "expo-font",
+      "expo-splash-screen"
+    ],
+
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.retailos.mobile"
+    },
+
+    "android": {
+      "package": "com.retailos.mobile",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#05070d",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
+      ]
+    },
+
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+
+    "updates": {
+      "url": "https://u.expo.dev/PLACEHOLDER-PROJECT-ID",
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      },
+      "fallbackToCacheTimeout": 0
+    },
+
+    "extra": {
+      "eas": {
+        "projectId": "PLACEHOLDER-PROJECT-ID"
+      }
+    }
+  }
+}
