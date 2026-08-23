@@ -95,6 +95,16 @@ class Settings(BaseSettings):
     scheduler_low_stock_interval_minutes: int = 15
     scheduler_day_close_interval_minutes: int = 60
 
+    # -- Login OTP ----------------------------------------------------------
+    # When True, EVERY successful password check is gated by a 6-digit code
+    # emailed to the user (see LoginOtpService). Users with TOTP enabled skip
+    # this gate — TOTP is already a second factor and stacking both would be
+    # user-hostile with no security gain.
+    #
+    # Off by default so existing pilots keep working. Flip on per-env once
+    # SMTP is confirmed, or leave off and rely on TOTP for privileged accounts.
+    login_otp_required: bool = False
+
     # -- Email dispatch -----------------------------------------------------
     # If any SMTP field is unset, the email dispatcher falls back to logging
     # the message instead of sending — safe default for pilots.

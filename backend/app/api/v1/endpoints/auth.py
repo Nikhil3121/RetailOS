@@ -17,6 +17,7 @@ from app.schemas.auth import (
     ChangePasswordRequest,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
+    LoginOtpVerifyRequest,
     LoginRequest,
     LoginResponse,
     LogoutRequest,
@@ -47,21 +48,63 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @_auth_limiter.limit("5/minute")
 async def login(payload: LoginRequest, db: DbSession, request: Request) -> LoginResponse:
     service = AuthService(db)
+    settings = get_settings()
     user = await service.authenticate(email=payload.email, password=payload.password)
 
     # 2FA gate — password check passed but this account has an authenticator
     # enrolled, so return a short-lived challenge instead of the token pair.
     # The caller must POST /auth/login/2fa with the current code to finish.
+    # Priority: TOTP > email OTP. If a user has TOTP, they don't also need
+    # the email OTP on top — that would be user-hostile with no security gain.
     if user.totp_enabled:
         return LoginResponse(
             requires_2fa=True,
             challenge_token=service.issue_2fa_challenge(user),
         )
 
+    # Email-OTP gate — opt-in via settings.login_otp_required. Issues a
+    # 6-digit code delivered by email (or console log when SMTP is off,
+    # for pilot/dev). Caller must POST /auth/login/otp with the code.
+    if settings.login_otp_required:
+        challenge, expires_in = service.issue_login_otp(user)
+        return LoginResponse(
+            requires_otp=True,
+            challenge_token=challenge,
+            otp_expires_in=expires_in,
+        )
+
     tokens = await service.issue_token_pair(user)
     await AuditService(db).log(
         action="user.login",
         summary=f"{user.email} signed in",
+        entity_type="user",
+        entity_id=user.id,
+        actor=user,
+        ip_address=(request.client.host if request.client else None),
+        user_agent=request.headers.get("user-agent"),
+    )
+    return LoginResponse(tokens=tokens, user=UserRead.model_validate(user))
+
+
+@router.post(
+    "/login/otp",
+    response_model=LoginResponse,
+    summary="Second step of an OTP-gated login — exchange challenge + code for tokens",
+)
+@_auth_limiter.limit("5/minute")
+async def login_otp(
+    payload: LoginOtpVerifyRequest, db: DbSession, request: Request
+) -> LoginResponse:
+    # Rate-limited at the same 5/min as /login so an attacker can't blast
+    # 6-digit codes against a stolen challenge_token from one IP.
+    auth = AuthService(db)
+    user = await auth.resolve_login_otp(
+        challenge_token=payload.challenge_token, code=payload.code
+    )
+    tokens = await auth.issue_token_pair(user)
+    await AuditService(db).log(
+        action="user.login_otp",
+        summary=f"{user.email} completed email OTP",
         entity_type="user",
         entity_id=user.id,
         actor=user,

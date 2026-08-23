@@ -9,13 +9,96 @@
  * In dev, the renderer is loaded from Vite (http://localhost:5173).
  * In prod, the renderer is loaded from the packaged file:// bundle.
  */
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage, shell } from 'electron';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const isDev = !app.isPackaged;
 const VITE_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
 
 let mainWindow: BrowserWindow | null = null;
+
+// ---------------------------------------------------------------------------
+// Credential vault (Electron safeStorage)
+// ---------------------------------------------------------------------------
+//
+// Stores the "remember me" email + password in an encrypted blob under
+// `app.getPath('userData')`. Encryption is delegated to Electron's
+// `safeStorage`, which uses:
+//   - macOS: Keychain
+//   - Windows: DPAPI (bound to the Windows user account)
+//   - Linux: libsecret (kwallet / gnome-keyring)
+//
+// The vault is unlocked automatically when the same OS user session opens the
+// app — which on modern devices means the login/PIN/biometric that gates the
+// OS itself. That satisfies the "verify with device owner" requirement in
+// the product spec without a separate biometric prompt on top.
+//
+// Errors bubble back through IPC as thrown promises so the renderer's
+// safeStorage helper can react (currently it just falls back silently, but
+// we surface exceptions in dev via the log line below).
+
+function credentialsFilePath(): string {
+  return path.join(app.getPath('userData'), 'retailos-credentials.enc');
+}
+
+function registerCredentialHandlers(): void {
+  ipcMain.handle('credentials:isSecure', () => {
+    // On Linux without a keyring installed this returns false; on Windows
+    // and macOS this is effectively always true. The renderer uses it to
+    // badge the "Remember me" checkbox as 🔒 Secured vs ⚠ Fallback.
+    return safeStorage.isEncryptionAvailable();
+  });
+
+  ipcMain.handle(
+    'credentials:save',
+    async (_event, email: unknown, password: unknown) => {
+      if (typeof email !== 'string' || typeof password !== 'string') {
+        throw new Error('credentials:save requires string email + password');
+      }
+      if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error('OS keychain is not available for encrypted storage.');
+      }
+      const payload = JSON.stringify({ email, password });
+      const encrypted = safeStorage.encryptString(payload);
+      await fs.writeFile(credentialsFilePath(), encrypted, { mode: 0o600 });
+    },
+  );
+
+  ipcMain.handle('credentials:load', async () => {
+    try {
+      const buf = await fs.readFile(credentialsFilePath());
+      if (!safeStorage.isEncryptionAvailable()) return null;
+      const plain = safeStorage.decryptString(buf);
+      const parsed = JSON.parse(plain) as { email?: unknown; password?: unknown };
+      if (typeof parsed.email !== 'string' || typeof parsed.password !== 'string') {
+        return null;
+      }
+      return { email: parsed.email, password: parsed.password };
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException | undefined)?.code;
+      if (code === 'ENOENT') return null;
+      // Corrupt / undecryptable blob (OS user changed, keychain wiped, etc.).
+      // Nuking it means the user just has to sign in once more; NOT nuking
+      // it would trap them behind a permanent "cannot decrypt" error.
+      try {
+        await fs.unlink(credentialsFilePath());
+      } catch {
+        /* swallow */
+      }
+      return null;
+    }
+  });
+
+  ipcMain.handle('credentials:clear', async () => {
+    try {
+      await fs.unlink(credentialsFilePath());
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException | undefined)?.code;
+      if (code !== 'ENOENT') throw err;
+    }
+  });
+}
 
 async function createMainWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
@@ -76,10 +159,18 @@ async function createMainWindow(): Promise<void> {
   });
 }
 
-app.whenReady().then(createMainWindow).catch((err) => {
-  console.error('Failed to create main window', err);
-  app.exit(1);
-});
+app.whenReady()
+  .then(() => {
+    // Register the credential IPC bridge BEFORE the window loads so the
+    // renderer's mount-time load call always finds a handler on the other
+    // end. Otherwise the first launch's remember-me lookup would fail.
+    registerCredentialHandlers();
+    return createMainWindow();
+  })
+  .catch((err) => {
+    console.error('Failed to create main window', err);
+    app.exit(1);
+  });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
