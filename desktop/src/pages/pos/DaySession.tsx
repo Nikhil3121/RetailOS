@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { DoorClosed, DoorOpen, Wallet } from 'lucide-react';
@@ -22,6 +23,14 @@ const LAST_STORE_KEY = 'retailos.pos.last_store_id';
 
 export function DaySessionPage(): JSX.Element {
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const location = useLocation();
+  // DaySessionGate stashes the path it redirected FROM in location.state
+  // so we can bounce the user back once the shift opens. Defaults to
+  // /dashboard when the user landed here directly.
+  const returnTo =
+    (location.state as { returnTo?: string } | null)?.returnTo ?? '/dashboard';
+
   const [storeId, setStoreId] = useState<string>(
     () => localStorage.getItem(LAST_STORE_KEY) ?? '',
   );
@@ -76,7 +85,14 @@ export function DaySessionPage(): JSX.Element {
       {storeId && !sessionQuery.isLoading && !isOpen && (
         <OpenSessionCard
           storeId={storeId}
-          onOpened={() => qc.invalidateQueries({ queryKey: ['day-session'] })}
+          onOpened={() => {
+            // Refresh caches, then bounce back to wherever the user was
+            // trying to reach. Doing the navigate here (not in the child)
+            // keeps the return-to logic co-located with the state that
+            // owns it.
+            qc.invalidateQueries({ queryKey: ['day-session'] });
+            navigate(returnTo, { replace: true });
+          }}
         />
       )}
 
