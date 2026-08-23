@@ -85,12 +85,16 @@ export function DaySessionPage(): JSX.Element {
       {storeId && !sessionQuery.isLoading && !isOpen && (
         <OpenSessionCard
           storeId={storeId}
-          onOpened={() => {
-            // Refresh caches, then bounce back to wherever the user was
-            // trying to reach. Doing the navigate here (not in the child)
-            // keeps the return-to logic co-located with the state that
-            // owns it.
-            qc.invalidateQueries({ queryKey: ['day-session'] });
+          onOpened={(session) => {
+            // Seed the "current session" cache with the freshly-opened
+            // record BEFORE navigating. DaySessionGate on the target
+            // page reads this same query key; without the pre-seed it
+            // would still see the stale "no session" data and bounce
+            // the user right back to /day-session.
+            qc.setQueryData(
+              ['day-session', 'current', storeId],
+              session,
+            );
             navigate(returnTo, { replace: true });
           }}
         />
@@ -113,7 +117,14 @@ export function DaySessionPage(): JSX.Element {
 
 function OpenSessionCard({
   storeId, onOpened,
-}: { storeId: string; onOpened: () => void }): JSX.Element {
+}: {
+  storeId: string;
+  /** Called after the shift opens, receives the fresh session so the caller
+   *  can seed the query cache before navigating away — otherwise a
+   *  DaySessionGate on the destination page would still see the stale
+   *  "closed" cache and bounce the user right back here. */
+  onOpened: (session: import('@/lib/day-sessions-api').DaySession) => void;
+}): JSX.Element {
   const {
     register, handleSubmit, reset,
     formState: { errors },
@@ -127,13 +138,13 @@ function OpenSessionCard({
     setError(null);
     setSubmitting(true);
     try {
-      await openSession({
+      const session = await openSession({
         store_id: storeId,
         opening_cash: values.opening_cash,
         notes: values.notes.trim() || null,
       });
       reset();
-      onOpened();
+      onOpened(session);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to open session.');
     } finally {
