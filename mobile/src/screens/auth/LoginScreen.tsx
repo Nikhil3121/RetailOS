@@ -1,14 +1,11 @@
 /**
  * LoginScreen — mobile.
  *
- * Three sequential stages, driven by whatever the backend returns from
+ * Two sequential stages, driven by whatever the backend returns from
  * /auth/login:
  *
  *   1. `credentials` — email + password.
  *   2. `twofa`       — TOTP code for users with an authenticator enrolled.
- *   3. `otp`         — 6-digit emailed code (login_otp_required=true on
- *                      the server AND user has no TOTP). Includes a live
- *                      countdown of the 60-second challenge window.
  *
  * Extra protections on stage 1:
  *   - Math CAPTCHA after 3 failed submits, regenerates on every wrong
@@ -19,7 +16,7 @@
  */
 
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -29,15 +26,15 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Eye, EyeOff, Calculator, Mail, ShieldCheck } from 'lucide-react-native';
+import { Eye, EyeOff, Calculator, ShieldCheck } from 'lucide-react-native';
 
 // __DEV__ is React Native's global build-time flag — true in Metro dev
 // builds, false in `npx expo export` / EAS release builds. Dev-gate the
 // pre-filled test credential so production APKs start clean.
-const DEV_EMAIL = __DEV__ ? 'owner@msmall.retailos.dev' : '';
+const DEV_EMAIL = __DEV__ ? 'infonik3121@gmail.com' : '';
 
 import { ApiError } from '@/api/api';
-import { login, login2fa, loginOtp } from '@/api/auth-api';
+import { login, login2fa } from '@/api/auth-api';
 import { Button } from '@/components/Button';
 import { GlassCard } from '@/components/GlassCard';
 import { Input } from '@/components/Input';
@@ -58,7 +55,7 @@ import { useAuthStore } from '@/stores/auth-store';
 
 const CAPTCHA_AFTER_FAILED_ATTEMPTS = 3;
 
-type Stage = 'credentials' | 'twofa' | 'otp';
+type Stage = 'credentials' | 'twofa';
 
 export function LoginScreen(): React.JSX.Element {
   const setSession = useAuthStore((s) => s.setSession);
@@ -80,8 +77,6 @@ export function LoginScreen(): React.JSX.Element {
 
   const [challengeToken, setChallengeToken] = useState<string | null>(null);
   const [code, setCode] = useState('');
-  const [otpSecondsRemaining, setOtpSecondsRemaining] = useState<number | null>(null);
-  const otpTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Preload remembered credentials once on mount.
   useEffect(() => {
@@ -103,25 +98,6 @@ export function LoginScreen(): React.JSX.Element {
       cancelled = true;
     };
   }, []);
-
-  // OTP countdown driver.
-  useEffect(() => {
-    if (stage !== 'otp' || otpSecondsRemaining === null) return;
-    if (otpTimerRef.current) clearInterval(otpTimerRef.current);
-    otpTimerRef.current = setInterval(() => {
-      setOtpSecondsRemaining((n) => {
-        if (n === null) return null;
-        if (n <= 1) {
-          if (otpTimerRef.current) clearInterval(otpTimerRef.current);
-          return 0;
-        }
-        return n - 1;
-      });
-    }, 1000);
-    return () => {
-      if (otpTimerRef.current) clearInterval(otpTimerRef.current);
-    };
-  }, [stage, otpSecondsRemaining]);
 
   const needsCaptcha = failedAttempts >= CAPTCHA_AFTER_FAILED_ATTEMPTS;
   useEffect(() => {
@@ -171,17 +147,6 @@ export function LoginScreen(): React.JSX.Element {
         return;
       }
 
-      if (res.requires_otp && res.challenge_token) {
-        setChallengeToken(res.challenge_token);
-        setOtpSecondsRemaining(res.otp_expires_in ?? 60);
-        setStage('otp');
-        setCode('');
-        setFailedAttempts(0);
-        setCaptcha(null);
-        await persistOrForget();
-        return;
-      }
-
       if (!res.tokens || !res.user) {
         setError('Login succeeded but the server returned no session.');
         return;
@@ -203,15 +168,12 @@ export function LoginScreen(): React.JSX.Element {
     }
   }
 
-  async function onSubmitCode(kind: 'twofa' | 'otp'): Promise<void> {
+  async function onSubmitTwoFa(): Promise<void> {
     if (!challengeToken) return;
     setError(null);
     setLoading(true);
     try {
-      const res =
-        kind === 'twofa'
-          ? await login2fa(challengeToken, code.trim())
-          : await loginOtp(challengeToken, code.trim());
+      const res = await login2fa(challengeToken, code.trim());
       if (!res.tokens || !res.user) {
         setError('Verification succeeded but no session was returned.');
         return;
@@ -227,10 +189,8 @@ export function LoginScreen(): React.JSX.Element {
   }
 
   function backToCredentials(): void {
-    if (otpTimerRef.current) clearInterval(otpTimerRef.current);
     setStage('credentials');
     setChallengeToken(null);
-    setOtpSecondsRemaining(null);
     setCode('');
     setError(null);
   }
@@ -254,9 +214,7 @@ export function LoginScreen(): React.JSX.Element {
             Retail<Text style={styles.brandNameBold}>OS</Text>
           </Text>
           <Text style={styles.brandTag}>
-            {stage === 'twofa' && 'Two-factor verification'}
-            {stage === 'otp' && 'Email code verification'}
-            {stage === 'credentials' && 'Sign in to continue'}
+            {stage === 'twofa' ? 'Two-factor verification' : 'Sign in to continue'}
           </Text>
         </View>
 
@@ -402,62 +360,13 @@ export function LoginScreen(): React.JSX.Element {
               ) : null}
               <Button
                 label="Verify & continue"
-                onPress={() => void onSubmitCode('twofa')}
+                onPress={onSubmitTwoFa}
                 disabled={!canSubmitCode}
                 loading={loading}
                 size="lg"
               />
               <Pressable onPress={backToCredentials} hitSlop={8}>
                 <Text style={styles.linkText}>Use a different account</Text>
-              </Pressable>
-            </View>
-          )}
-
-          {stage === 'otp' && (
-            <View style={{ gap: 14 }}>
-              <View style={styles.stageHeader}>
-                <Mail size={18} color={colors.slate200} />
-                <Text style={styles.stageHeaderText}>
-                  We emailed a 6-digit code — it expires in one minute.
-                </Text>
-              </View>
-              <Input
-                label="Email code"
-                value={code}
-                onChangeText={setCode}
-                keyboardType="number-pad"
-                autoComplete="one-time-code"
-                textContentType="oneTimeCode"
-                placeholder="123 456"
-                maxLength={6}
-              />
-              {otpSecondsRemaining !== null && (
-                <Text
-                  style={
-                    otpSecondsRemaining <= 10
-                      ? styles.countdownWarn
-                      : styles.countdown
-                  }
-                >
-                  {otpSecondsRemaining > 0
-                    ? `Expires in ${otpSecondsRemaining}s`
-                    : 'Code expired — sign in again to receive a new one.'}
-                </Text>
-              )}
-              {error ? (
-                <View style={styles.errorBox}>
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              ) : null}
-              <Button
-                label="Verify & continue"
-                onPress={() => void onSubmitCode('otp')}
-                disabled={!canSubmitCode || otpSecondsRemaining === 0}
-                loading={loading}
-                size="lg"
-              />
-              <Pressable onPress={backToCredentials} hitSlop={8}>
-                <Text style={styles.linkText}>Back to sign in</Text>
               </Pressable>
             </View>
           )}
@@ -555,8 +464,6 @@ const styles = StyleSheet.create({
   stageHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   stageHeaderText: { color: colors.slate400, fontSize: 13, flex: 1 },
 
-  countdown: { color: colors.slate400, fontSize: 12 },
-  countdownWarn: { color: colors.rose300, fontSize: 12, fontWeight: '500' },
   linkText: {
     color: colors.slate500,
     fontSize: 12,

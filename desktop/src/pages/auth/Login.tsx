@@ -1,16 +1,13 @@
 /**
  * Login screen.
  *
- * Three sequential stages, driven by whatever the backend returns from
+ * Two sequential stages, driven by whatever the backend returns from
  * /auth/login:
  *
- *   1. `credentials`  — email + password. If backend flags requires_2fa
- *                       or requires_otp, we advance to the matching stage.
- *                       Otherwise tokens land and we route to /dashboard.
- *   2. `twofa`        — TOTP code for users with an authenticator enrolled.
- *   3. `otp`          — 6-digit emailed code (login_otp_required=True on
- *                       the server AND user has no TOTP). Includes a
- *                       live countdown of the 60-second challenge window.
+ *   1. `credentials` — email + password. If backend flags requires_2fa
+ *                      we advance to the twofa stage. Otherwise tokens
+ *                      land and we route to /dashboard.
+ *   2. `twofa`       — TOTP code for users with an authenticator enrolled.
  *
  * Extra protections layered onto stage 1:
  *
@@ -22,11 +19,10 @@
  *   - **Remember me**: opt-in checkbox that persists email + password
  *     via Electron safeStorage (falls back to localStorage with a loud
  *     warning if the bridge is not present — see lib/remember-me.ts).
- *     The stored password never leaves the machine; the second factor
- *     (2FA or OTP) still applies on every login.
+ *     The stored password never leaves the machine.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
@@ -35,7 +31,7 @@ import { Calculator, LogIn, Mail, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ApiError } from '@/lib/api';
-import { login, login2fa, loginOtp } from '@/lib/auth-api';
+import { login, login2fa } from '@/lib/auth-api';
 import { generateMathCaptcha, type MathCaptcha, verifyMathCaptcha } from '@/lib/math-captcha';
 import {
   clearRememberedCredentials,
@@ -50,7 +46,7 @@ import { useAuthStore } from '@/stores/auth-store';
 // aggressive enough to stop bots from getting an infinite guess budget.
 const CAPTCHA_AFTER_FAILED_ATTEMPTS = 3;
 
-type Stage = 'credentials' | 'twofa' | 'otp';
+type Stage = 'credentials' | 'twofa';
 
 interface CredentialForm {
   email: string;
@@ -90,10 +86,6 @@ export function Login(): JSX.Element {
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [captcha, setCaptcha] = useState<MathCaptcha | null>(null);
 
-  // OTP countdown — populated when the backend hands us `otp_expires_in`.
-  const [otpSecondsRemaining, setOtpSecondsRemaining] = useState<number | null>(null);
-  const otpTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   // "Remember me" secure-vs-fallback badge.
   const [rememberSecure, setRememberSecure] = useState<boolean>(false);
 
@@ -132,27 +124,6 @@ export function Login(): JSX.Element {
       cancelled = true;
     };
   }, [setValue, setFocus]);
-
-  // OTP countdown driver — one interval, torn down whenever we leave the
-  // otp stage or the page unmounts. Skips the guard entirely if the
-  // backend never handed us an expires_in.
-  useEffect(() => {
-    if (stage !== 'otp' || otpSecondsRemaining === null) return;
-    if (otpTimerRef.current) clearInterval(otpTimerRef.current);
-    otpTimerRef.current = setInterval(() => {
-      setOtpSecondsRemaining((n) => {
-        if (n === null) return null;
-        if (n <= 1) {
-          if (otpTimerRef.current) clearInterval(otpTimerRef.current);
-          return 0;
-        }
-        return n - 1;
-      });
-    }, 1000);
-    return () => {
-      if (otpTimerRef.current) clearInterval(otpTimerRef.current);
-    };
-  }, [stage, otpSecondsRemaining]);
 
   const needsCaptcha = failedAttempts >= CAPTCHA_AFTER_FAILED_ATTEMPTS;
 
@@ -208,16 +179,6 @@ export function Login(): JSX.Element {
         return;
       }
 
-      if (res.requires_otp && res.challenge_token) {
-        setChallengeToken(res.challenge_token);
-        setOtpSecondsRemaining(res.otp_expires_in ?? 60);
-        setStage('otp');
-        setFailedAttempts(0);
-        setCaptcha(null);
-        await persistOrForgetCredentials(email, values.password, values.remember);
-        return;
-      }
-
       if (res.tokens && res.user) {
         await persistOrForgetCredentials(email, values.password, values.remember);
         setSession(res.tokens, res.user);
@@ -263,31 +224,9 @@ export function Login(): JSX.Element {
     }
   }
 
-  async function onSubmitOtp(values: CodeForm): Promise<void> {
-    if (!challengeToken) return;
-    setServerError(null);
-    setSubmitting(true);
-    try {
-      const res = await loginOtp(challengeToken, values.code.trim());
-      if (res.tokens && res.user) {
-        setSession(res.tokens, res.user);
-        const from = (location.state as { from?: string } | null)?.from ?? '/dashboard';
-        navigate(from, { replace: true });
-      } else {
-        setServerError('Unexpected OTP response.');
-      }
-    } catch (err) {
-      setServerError(err instanceof ApiError ? err.message : 'Code did not verify.');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   function backToCredentials(): void {
     setStage('credentials');
     setChallengeToken(null);
-    setOtpSecondsRemaining(null);
-    if (otpTimerRef.current) clearInterval(otpTimerRef.current);
     setServerError(null);
     codeForm.reset();
     reset({
@@ -317,9 +256,7 @@ export function Login(): JSX.Element {
           <div>
             <div className="text-lg font-semibold tracking-tight text-white">RetailOS</div>
             <div className="text-xs text-slate-500">
-              {stage === 'twofa' && 'Two-factor verification'}
-              {stage === 'otp' && 'Email code verification'}
-              {stage === 'credentials' && 'Sign in to continue'}
+              {stage === 'twofa' ? 'Two-factor verification' : 'Sign in to continue'}
             </div>
           </div>
         </div>
@@ -363,63 +300,6 @@ export function Login(): JSX.Element {
               className="w-full text-center text-xs text-slate-500 hover:text-slate-200"
             >
               Use a different account
-            </button>
-          </form>
-        )}
-
-        {stage === 'otp' && (
-          <form className="space-y-5" onSubmit={codeForm.handleSubmit(onSubmitOtp)} noValidate>
-            <p className="text-sm text-slate-400">
-              We just emailed a 6-digit code to your account. Enter it below —
-              it expires in one minute.
-            </p>
-            <Input
-              label="Email code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              autoFocus
-              placeholder="123 456"
-              maxLength={6}
-              error={codeForm.formState.errors.code?.message}
-              {...codeForm.register('code', {
-                required: 'Code is required',
-                pattern: { value: /^\d{6}$/, message: 'Six digits' },
-              })}
-            />
-            {otpSecondsRemaining !== null && (
-              <div
-                className={
-                  otpSecondsRemaining <= 10
-                    ? 'text-xs font-medium text-rose-300'
-                    : 'text-xs text-slate-400'
-                }
-              >
-                {otpSecondsRemaining > 0
-                  ? `Expires in ${otpSecondsRemaining}s`
-                  : 'Code expired — sign in again to receive a new one.'}
-              </div>
-            )}
-            {serverError && (
-              <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
-                {serverError}
-              </div>
-            )}
-            <Button
-              type="submit"
-              size="lg"
-              className="w-full"
-              loading={submitting}
-              disabled={otpSecondsRemaining === 0}
-              leadingIcon={<Mail className="h-4 w-4" />}
-            >
-              Verify & continue
-            </Button>
-            <button
-              type="button"
-              onClick={backToCredentials}
-              className="w-full text-center text-xs text-slate-500 hover:text-slate-200"
-            >
-              Back to sign in
             </button>
           </form>
         )}

@@ -7,18 +7,7 @@ import type { CurrentUser, TokenPair } from '@/types/auth';
 
 export interface LoginResponse {
   requires_2fa: boolean;
-  /**
-   * True when the server is configured to gate logins behind an emailed
-   * 6-digit code (`login_otp_required=true`) AND the user does not have
-   * TOTP enrolled. TOTP wins if both would fire.
-   */
-  requires_otp: boolean;
   challenge_token: string | null;
-  /**
-   * Seconds until the OTP challenge JWT expires. Populated only when
-   * `requires_otp=true`. Drives the countdown in the OTP screen.
-   */
-  otp_expires_in: number | null;
   tokens: TokenPair | null;
   user: CurrentUser | null;
 }
@@ -38,26 +27,6 @@ export function login2fa(
 ): Promise<LoginResponse> {
   return apiRequest<LoginResponse>({
     path: '/auth/login/2fa',
-    method: 'POST',
-    body: { challenge_token: challengeToken, code },
-    auth: false,
-  });
-}
-
-/**
- * Second step of an email-OTP-gated login. Presents the challenge_token
- * received from /auth/login + the 6-digit code the user typed from the
- * OTP email. Returns the same LoginResponse shape as /auth/login, but
- * with `tokens` + `user` populated (or a 401 if the code was wrong /
- * the challenge expired — the two errors are deliberately identical to
- * prevent an attacker distinguishing "still guessing" from "start over").
- */
-export function loginOtp(
-  challengeToken: string,
-  code: string,
-): Promise<LoginResponse> {
-  return apiRequest<LoginResponse>({
-    path: '/auth/login/otp',
     method: 'POST',
     body: { challenge_token: challengeToken, code },
     auth: false,

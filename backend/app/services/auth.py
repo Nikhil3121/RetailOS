@@ -73,35 +73,6 @@ class AuthService:
             )
         return user
 
-    # --- Login OTP (email) --------------------------------------------------
-    #
-    # Distinct from 2FA/TOTP: the OTP is delivered by the server (email) once
-    # per login, not generated on the user's phone. Both cannot fire on the
-    # same login — TOTP wins if a user has it enrolled.
-
-    def issue_login_otp(self, user: User) -> tuple[str, int]:
-        """Generate + deliver a fresh OTP; return (challenge_token, expires_in_seconds).
-
-        Kept as an instance method (not a free function) so the endpoint layer
-        stays uniform — one service, one entry point per flow.
-        """
-        # Local import — the OTP service imports from security.py, and we
-        # want to keep the top-of-file import block focused on the always-
-        # loaded auth primitives.
-        from app.services.login_otp import LoginOtpService
-
-        return LoginOtpService().issue(user)
-
-    async def resolve_login_otp(self, *, challenge_token: str, code: str) -> User:
-        """Verify an OTP challenge and return the (still-active) user."""
-        from app.services.login_otp import LoginOtpService
-
-        subject = LoginOtpService().verify(challenge_token=challenge_token, code=code)
-        user = await self.db.get(User, uuid.UUID(subject))
-        if user is None or not user.is_active:
-            raise AuthenticationError("Account disabled.", code="ACCOUNT_DISABLED")
-        return user
-
     async def issue_token_pair(self, user: User) -> TokenPair:
         """Mint fresh access + refresh tokens for `user` and persist the refresh record."""
         access = create_access_token(

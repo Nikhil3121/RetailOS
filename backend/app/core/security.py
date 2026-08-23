@@ -14,6 +14,7 @@ from typing import Any
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+# `hashlib` stays imported — it still backs `hash_refresh_token` below.
 
 from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError
@@ -54,7 +55,6 @@ class TokenType(str, Enum):
     ACCESS = "access"
     RESET = "reset"
     CHALLENGE = "2fa_challenge"
-    LOGIN_OTP = "login_otp"
 
 
 def _encode(payload: dict[str, Any], expires_delta: timedelta, token_type: TokenType) -> str:
@@ -91,30 +91,6 @@ def create_2fa_challenge_token(*, subject: str) -> str:
     """Issue a very short-lived (5 min) token that gates the second step of a
     2FA login — carries the user id but no session privileges of its own."""
     return _encode({"sub": subject}, timedelta(minutes=5), TokenType.CHALLENGE)
-
-
-def create_login_otp_challenge(*, subject: str, code_hash: str, seconds: int = 60) -> str:
-    """Issue a very short-lived login-OTP challenge.
-
-    The 6-digit code is HASHED (sha256) and embedded in the JWT payload — the
-    plaintext code is only ever emailed to the user. This means the server
-    holds no OTP state (no table, no cache); verification is done by hashing
-    the user's input and comparing to the payload's `otp_hash` field.
-
-    seconds defaults to 60 per product spec ("valid for 1 minute").
-    """
-    return _encode(
-        {"sub": subject, "otp_hash": code_hash},
-        timedelta(seconds=seconds),
-        TokenType.LOGIN_OTP,
-    )
-
-
-def hash_otp_code(code: str) -> str:
-    """SHA-256 hash of a numeric OTP. Not password-strength (argon2 would take
-    ~200ms and is overkill for a 6-digit ephemeral secret), but constant-time
-    comparison + one-way is enough since the token is bound to a 60s window."""
-    return hashlib.sha256(code.encode("utf-8")).hexdigest()
 
 
 def decode_token(token: str, *, expected_type: TokenType) -> dict[str, Any]:
