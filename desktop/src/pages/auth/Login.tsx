@@ -33,6 +33,7 @@ import { Input } from '@/components/ui/Input';
 import { ApiError } from '@/lib/api';
 import { login, login2fa } from '@/lib/auth-api';
 import { generateMathCaptcha, type MathCaptcha, verifyMathCaptcha } from '@/lib/math-captcha';
+import { decidePostLoginRoute } from '@/lib/post-login-route';
 import {
   clearRememberedCredentials,
   isRememberMeSecure,
@@ -182,8 +183,16 @@ export function Login(): JSX.Element {
       if (res.tokens && res.user) {
         await persistOrForgetCredentials(email, values.password, values.remember);
         setSession(res.tokens, res.user);
-        const from = (location.state as { from?: string } | null)?.from ?? '/dashboard';
-        navigate(from, { replace: true });
+        // If the caller was deep-linking to a specific page, honour that.
+        // Otherwise decide dashboard vs day-session based on whether the
+        // shift is currently open — see [lib/post-login-route.ts].
+        const deepLink = (location.state as { from?: string } | null)?.from;
+        if (deepLink) {
+          navigate(deepLink, { replace: true });
+        } else {
+          const target = await decidePostLoginRoute(res.user);
+          navigate(target.path, { replace: true, state: target.state });
+        }
         return;
       }
 
@@ -212,8 +221,13 @@ export function Login(): JSX.Element {
       const res = await login2fa(challengeToken, values.code.trim());
       if (res.tokens && res.user) {
         setSession(res.tokens, res.user);
-        const from = (location.state as { from?: string } | null)?.from ?? '/dashboard';
-        navigate(from, { replace: true });
+        const deepLink = (location.state as { from?: string } | null)?.from;
+        if (deepLink) {
+          navigate(deepLink, { replace: true });
+        } else {
+          const target = await decidePostLoginRoute(res.user);
+          navigate(target.path, { replace: true, state: target.state });
+        }
       } else {
         setServerError('Unexpected 2FA response.');
       }

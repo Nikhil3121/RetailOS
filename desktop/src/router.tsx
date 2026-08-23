@@ -10,7 +10,6 @@
  */
 import { createHashRouter, Navigate } from 'react-router-dom';
 
-import { DaySessionGate } from '@/components/auth/DaySessionGate';
 import { RequireAuth } from '@/components/auth/RequireAuth';
 import { AppShell } from '@/components/layout/AppShell';
 import { ChangePassword } from '@/pages/ChangePassword';
@@ -67,21 +66,16 @@ export const router = createHashRouter([
         element: <AppShell />,
         children: [
           { index: true, element: <Navigate to="/dashboard" replace /> },
-          // Dashboard + billing-adjacent pages assume there's an open day
-          // session for the current user's store. If there isn't, the
-          // DaySessionGate bounces the user to /day-session; opening a
-          // shift there sends them straight back to whatever they were
-          // originally trying to open (defaulting to /dashboard).
-          {
-            element: <DaySessionGate />,
-            children: [
-              { path: 'dashboard', element: <Dashboard /> },
-              { path: 'billing', element: <Billing /> },
-              { path: 'billing/outstanding', element: <OutstandingDues /> },
-              { path: 'sales', element: <Sales /> },
-              { path: 'sales/:id/invoice', element: <Invoice /> },
-            ],
-          },
+          // The "open your day session first" prompt is enforced ONCE at
+          // login time in [pages/auth/Login.tsx] via decidePostLoginRoute.
+          // We deliberately don't wrap these routes in a permanent gate —
+          // once the user is inside the app, clicking Dashboard just
+          // shows the dashboard, no redirect games.
+          { path: 'dashboard', element: <Dashboard /> },
+          { path: 'billing', element: <Billing /> },
+          { path: 'billing/outstanding', element: <OutstandingDues /> },
+          { path: 'sales', element: <Sales /> },
+          { path: 'sales/:id/invoice', element: <Invoice /> },
           { path: 'system', element: <SystemStatus /> },
           { path: 'stores', element: <Stores /> },
           { path: 'settings', element: <Settings /> },
@@ -133,12 +127,7 @@ export const router = createHashRouter([
             children: [{ index: true, element: <AuditLog /> }],
           },
 
-          // Day-session is deliberately OUTSIDE DaySessionGate — it's
-          // the page the gate redirects to when no session is open, so
-          // gating it would create a loop.
           { path: 'day-session', element: <DaySessionPage /> },
-          // NOTE: sales/, sales/:id/invoice, billing, billing/outstanding
-          // are declared above inside the DaySessionGate wrapper.
 
           // Manager+ area
           {
