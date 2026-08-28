@@ -10,7 +10,7 @@ import { Button } from '@/components/Button';
 import { GlassCard } from '@/components/GlassCard';
 import { PageHeader } from '@/components/PageHeader';
 import { API_BASE_URL } from '@/constants/env';
-import { colors, radius, spacing } from '@/constants/theme';
+import { colors, spacing } from '@/constants/theme';
 import { useAuthStore } from '@/stores/auth-store';
 import { ROLE_LABEL } from '@/types/auth';
 

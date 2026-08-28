@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     Boolean,
     Date,
-    DateTime,
     ForeignKey,
     Numeric,
     String,
@@ -37,7 +36,6 @@ from app.db.base import Base, TimestampMixin, UUIDPKMixin, UtcDateTime
 
 if TYPE_CHECKING:
     from app.db.models.store import Store
-    from app.db.models.user import User
 
 
 class ExpenseStatus(str, Enum):

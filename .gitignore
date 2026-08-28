@@ -36,3 +36,6 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 *.db
+
+# Extracted portable build (not source)
+/RetailOS/

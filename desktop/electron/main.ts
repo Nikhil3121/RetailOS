@@ -14,7 +14,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const isDev = !app.isPackaged;
-const VITE_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
+// Must match `server.port` in vite.config.ts. 5273 is RetailOS-specific —
+// port 5173 (Vite's default) is contested by other Vite projects on this
+// machine, and pointing here at 5173 would make the RetailOS shell load
+// whichever app happened to claim that port first.
+const VITE_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5273';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -116,7 +120,9 @@ async function createMainWindow(): Promise<void> {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      devTools: true,   // enabled in packaged builds so cashiers/support can debug
+      // Kept available in packaged builds so support can diagnose issues on a
+      // shop's PC via F12 — but never opened automatically (see below).
+      devTools: true,
     },
   });
 
@@ -141,14 +147,10 @@ async function createMainWindow(): Promise<void> {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     await mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
-    // Auto-open DevTools on packaged launch — makes it easy to diagnose
-    // "unable to reach server" and similar issues from any Windows PC.
-    // Remove this line once we're happy the app is stable in production.
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
 
-  // Register global keyboard shortcuts so F12 / Ctrl+Shift+I always work,
-  // even if the menu bar is hidden.
+  // F12 / Ctrl+Shift+I still open DevTools on demand — the menu bar is hidden,
+  // so this is the only way support can reach them on a shop's machine.
   mainWindow.webContents.on('before-input-event', (_event, input) => {
     const isToggleDevTools =
       input.key === 'F12' ||

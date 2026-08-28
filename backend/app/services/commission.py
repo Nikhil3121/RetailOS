@@ -16,7 +16,7 @@ import uuid
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 

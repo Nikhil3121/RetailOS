@@ -16,7 +16,6 @@ import {
   History,
   IndianRupee,
   LayoutDashboard,
-  LineChart,
   Megaphone,
   PackageSearch,
   Receipt,
@@ -169,7 +168,6 @@ const NAV_GROUPS: NavGroup[] = [
       { label: 'Reports', to: '/reports', icon: BarChart3, minRole: 'manager' },
       { label: 'Inventory health', to: '/inventory-health', icon: PackageSearch, minRole: 'manager' },
       { label: 'Purchase analytics', to: '/purchase-analytics', icon: Activity, minRole: 'manager' },
-      { label: 'Growth trends', to: '/reports', icon: LineChart, minRole: 'manager' },
     ],
   },
   {
@@ -188,9 +186,9 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-// The "Growth trends" entry is a placeholder pointing to /reports — kept
-// so the Insights group visibly hosts multiple children. It resolves to
-// the same active route as Reports itself.
+// Every `to` above must be unique — SidebarLink keys its list on item.to,
+// so two entries sharing a path trigger React's duplicate-key warning and
+// one of them gets dropped from the rendered tree.
 
 export function Sidebar(): JSX.Element {
   const collapsed = useUIStore((s) => s.sidebarCollapsed);

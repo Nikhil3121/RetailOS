@@ -28,17 +28,13 @@ import {
 } from 'react-native';
 import { Eye, EyeOff, Calculator, ShieldCheck } from 'lucide-react-native';
 
-// __DEV__ is React Native's global build-time flag — true in Metro dev
-// builds, false in `npx expo export` / EAS release builds. Dev-gate the
-// pre-filled test credential so production APKs start clean.
-const DEV_EMAIL = __DEV__ ? 'infonik3121@gmail.com' : '';
-
 import { ApiError } from '@/api/api';
 import { login, login2fa } from '@/api/auth-api';
 import { Button } from '@/components/Button';
 import { GlassCard } from '@/components/GlassCard';
 import { Input } from '@/components/Input';
 import { Logo } from '@/components/Logo';
+import { API_BASE_URL } from '@/constants/env';
 import { colors, radius } from '@/constants/theme';
 import {
   clearRememberedCredentials,
@@ -61,7 +57,7 @@ export function LoginScreen(): React.JSX.Element {
   const setSession = useAuthStore((s) => s.setSession);
 
   const [stage, setStage] = useState<Stage>('credentials');
-  const [email, setEmail] = useState(DEV_EMAIL);
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
 
@@ -372,9 +368,9 @@ export function LoginScreen(): React.JSX.Element {
           )}
         </GlassCard>
 
-        <Text style={styles.footer}>
-          Backend · retailos-backend-8jwi.onrender.com
-        </Text>
+        {__DEV__ && (
+          <Text style={styles.footer}>Backend · {API_BASE_URL}</Text>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );

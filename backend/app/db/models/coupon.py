@@ -9,7 +9,7 @@ validation only.
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     Boolean,
     Date,
-    DateTime,
     ForeignKey,
     Integer,
     Numeric,
@@ -27,13 +26,12 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, UUIDPKMixin
 
 if TYPE_CHECKING:
-    from app.db.models.customer import Customer
-    from app.db.models.sale import Sale
+    pass
 
 
 class CouponDiscountType(str, Enum):

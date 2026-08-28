@@ -16,7 +16,6 @@ from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
-    DateTime,
     ForeignKey,
     Numeric,
     String,

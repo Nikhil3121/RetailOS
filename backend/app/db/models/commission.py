@@ -13,7 +13,7 @@ resolves the best-matching rule per line. Two consequences:
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING

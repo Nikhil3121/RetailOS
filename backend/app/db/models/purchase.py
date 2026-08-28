@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Date,
-    DateTime,
     ForeignKey,
     Numeric,
     String,

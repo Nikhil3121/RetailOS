@@ -7,7 +7,7 @@ never crash the scheduler; they're logged and swallowed.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 from app.core.logging import get_logger
 from app.db.models.notification import NotificationKind, NotificationSeverity

@@ -29,7 +29,6 @@ from app.db.models.notification import (
 )
 from app.db.models.user import User, UserRole
 from app.schemas.notification import (
-    NotificationCreate,
     NotificationRuleCreate,
     NotificationRuleUpdate,
 )

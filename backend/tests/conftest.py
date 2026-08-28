@@ -27,6 +27,20 @@ from app.db.base import Base  # noqa: E402
 
 
 @pytest.fixture(scope="session", autouse=True)
+def _disable_rate_limiting() -> None:
+    """Turn off slowapi for the suite.
+
+    Limits are keyed by client IP and every test shares one, so the 5/min
+    ceiling on /auth/login trips after a few logins and fails unrelated
+    tests with 429. The limits themselves are covered separately against
+    a live deployment.
+    """
+    from app.core.rate_limit import limiter
+
+    limiter.enabled = False
+
+
+@pytest.fixture(scope="session", autouse=True)
 def _override_engine() -> AsyncIterator[None]:
     """Rebuild the engine against SQLite once per test session."""
     get_settings.cache_clear()

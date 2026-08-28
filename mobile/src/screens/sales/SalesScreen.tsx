@@ -10,7 +10,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Receipt } from 'lucide-react-native';
 
 import { EmptyState } from '@/components/EmptyState';
-import { GlassCard } from '@/components/GlassCard';
 import { PageHeader } from '@/components/PageHeader';
 import { listSales } from '@/api/sales-api';
 import { inr } from '@/lib/money';

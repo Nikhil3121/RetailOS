@@ -15,10 +15,10 @@ aggregate across every store.
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from decimal import Decimal
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.inventory import MovementKind, StockBalance, StockMovement

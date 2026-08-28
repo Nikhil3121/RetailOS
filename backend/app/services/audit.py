@@ -13,7 +13,6 @@ from typing import Any
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
 from app.db.models.audit import AuditLog, UserDashboardLayout
 from app.db.models.user import User
 

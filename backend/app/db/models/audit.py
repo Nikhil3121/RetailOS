@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from typing import Any, TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, JSON, String, UniqueConstraint, Uuid

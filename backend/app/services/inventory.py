@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import uuid
 from decimal import Decimal
-from typing import Iterable
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,7 +28,6 @@ from app.db.models.product import Product, ProductVariant
 from app.db.models.store import Store
 from app.db.models.unit import Unit
 from app.schemas.inventory import (
-    StockAdjustmentLine,
     StockAdjustmentRequest,
     StockLevelRow,
     StockTransferRequest,

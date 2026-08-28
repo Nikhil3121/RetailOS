@@ -15,7 +15,13 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    // Dedicated port for RetailOS. Deliberately NOT Vite's default 5173 —
+    // other projects on this machine (retail-cognitive-os, Diginex Media)
+    // also run Vite and would otherwise squat 5173 first, causing the
+    // Electron shell to load the WRONG app's UI in dev mode.
+    // `strictPort` makes a collision fail loudly instead of silently
+    // sliding to another port and loading someone else's bundle.
+    port: 5273,
     strictPort: true,
     host: '127.0.0.1',
   },

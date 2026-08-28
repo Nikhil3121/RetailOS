@@ -12,10 +12,10 @@ would replace this without changing the shape of `estimated_profit`.
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from decimal import Decimal
 
-from sqlalchemy import case, extract, func, select
+from sqlalchemy import extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.product import ProductVariant
