@@ -42,7 +42,11 @@ async def _seed(email: str, password: str, full_name: str) -> None:
             existing.role = UserRole.SUPER_ADMIN
             existing.is_active = True
             existing.full_name = full_name
-            print(f"[ok] Updated existing user {email} → SUPER_ADMIN")
+            # ASCII only: this runs on Windows consoles using cp1252, where a
+            # non-ASCII character raises UnicodeEncodeError. The print sits
+            # inside the session_scope block, so that crash rolled the
+            # password change back instead of committing it.
+            print(f"[ok] Updated existing user {email} -> SUPER_ADMIN")
 
 
 def main(argv: list[str] | None = None) -> None:
