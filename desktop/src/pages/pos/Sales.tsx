@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/Select';
 import { ApiError } from '@/lib/api';
 import { listSales, type SaleStatus, type SaleSummary } from '@/lib/sales-api';
 import { listStores } from '@/lib/stores-api';
+import { LocalSalesPanel } from '@/pages/pos/LocalSalesPanel';
 
 const STATUS_OPTIONS = [
   { label: 'Completed', value: 'completed' },
@@ -111,6 +112,11 @@ export function Sales(): JSX.Element {
           <Input label="To" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
         </div>
       </div>
+
+      {/* Bills stored on this terminal, and whether they reached the server.
+          Rendered above the server list because an unsynced bill is the thing
+          someone is looking for; a synced one is already in the books. */}
+      <LocalSalesPanel />
 
       {query.isError && (
         <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">

@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 
 import { AppShortcuts } from '@/components/AppShortcuts';
+import { SaleSyncProvider } from '@/hooks/SaleSyncContext';
 import { Sidebar } from './Sidebar';
 import { TitleBar } from './TitleBar';
 
@@ -11,6 +12,10 @@ import { TitleBar } from './TitleBar';
  */
 export function AppShell(): JSX.Element {
   return (
+    // The offline-sale sync loop is mounted HERE, once, for the whole
+    // authenticated session. Anywhere else it would restart on navigation, or
+    // run several copies at once.
+    <SaleSyncProvider>
     <div className="relative flex h-screen w-screen flex-col bg-ink-950 text-slate-200">
       <AppShortcuts />
       <div className="pointer-events-none absolute inset-0 grid-overlay opacity-60" />
@@ -24,5 +29,6 @@ export function AppShell(): JSX.Element {
         </main>
       </div>
     </div>
+    </SaleSyncProvider>
   );
 }

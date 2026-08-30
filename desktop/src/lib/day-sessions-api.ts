@@ -14,6 +14,10 @@ export interface DaySession {
   counted_cash: string | null;
   expected_cash: string | null;
   cash_diff: string | null;
+  /** Set when a late-arriving offline sale restated this shift after close.
+   *  When present, expected_cash and cash_diff are NOT the figures produced
+   *  at close — the before/after detail lives in the audit log. */
+  restated_at: string | null;
   notes: string | null;
   created_at: string;
 }
@@ -31,6 +35,20 @@ export interface DaySessionSummary {
 
 export function currentSession(storeId: string): Promise<DaySession | null> {
   return apiRequest({ path: `/day-sessions/current?store_id=${storeId}`, method: 'GET' });
+}
+
+/**
+ * Recent sessions for a store, newest first.
+ *
+ * `currentSession` returns only the OPEN one, so a closed shift — including
+ * one restated after close — is invisible to it. This is what the Day session
+ * screen reads to show the last shift's reconciliation.
+ */
+export function recentSessions(storeId: string, limit = 5): Promise<DaySession[]> {
+  return apiRequest({
+    path: `/day-sessions?store_id=${storeId}&limit=${limit}`,
+    method: 'GET',
+  });
 }
 
 export function openSession(body: {

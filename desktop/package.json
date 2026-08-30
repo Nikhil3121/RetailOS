@@ -18,10 +18,15 @@
     "typecheck": "tsc --noEmit && tsc -p electron/tsconfig.json --noEmit",
     "dist": "npm run build && electron-builder --publish never",
     "dist:win": "npm run build && electron-builder --win --publish never",
-    "dist:portable": "npm run build && electron-builder --win --dir --publish never"
+    "dist:portable": "npm run build && electron-builder --win --dir --publish never",
+    "rebuild:native": "electron-rebuild -f -w better-sqlite3",
+    "rebuild:native:node": "npm rebuild better-sqlite3",
+    "test": "npm run rebuild:native:node && vitest run && npm run rebuild:native",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.0",
+    "better-sqlite3": "^11.10.0",
     "clsx": "^2.1.1",
     "framer-motion": "^11.13.0",
     "lucide-react": "^0.468.0",
@@ -34,6 +39,8 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.7.2",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.1",
     "@types/react": "^19.0.1",
     "@types/react-dom": "^19.0.1",
@@ -43,10 +50,12 @@
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
     "eslint": "^9.16.0",
+    "happy-dom": "^20.12.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.15",
     "typescript": "^5.7.2",
     "vite": "^6.0.1",
+    "vitest": "^2.1.9",
     "wait-on": "^8.0.1"
   },
   "build": {
@@ -58,13 +67,21 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
-      "package.json"
+      "package.json",
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/bindings/**/*",
+      "node_modules/file-uri-to-path/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**/*"
     ],
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "RetailOS-Setup-${version}.${ext}"
@@ -78,11 +95,15 @@
       "shortcutName": "RetailOS"
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "category": "public.app-category.business"
     },
     "linux": {
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "category": "Office"
     }
   }

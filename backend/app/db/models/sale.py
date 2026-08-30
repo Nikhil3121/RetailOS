@@ -127,6 +127,18 @@ class Sale(UUIDPKMixin, TimestampMixin, Base):
     # ringing it up twice. NULL for legacy / non-offline flows.
     client_uuid: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
+    # ---- offline attribution (Phase 5E) ------------------------------------
+    # When the sale ACTUALLY happened. Set from the terminal for an offline
+    # bill, and to server now() for an online one, so it is always populated
+    # and always means the same thing. Never overwritten after creation - it
+    # is the primary audit fact and drives the invoice month.
+    occurred_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    # Which till rang the sale. Carries the terminal's device_uuid. Deliberately
+    # NOT a foreign key: no server-side terminal registry exists yet, and a sale
+    # must not be rejected because a till has not been provisioned. NULL on
+    # every sale written before this phase.
+    terminal_uuid: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+
     store_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("stores.id", ondelete="RESTRICT"),

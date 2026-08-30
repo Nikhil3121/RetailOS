@@ -19,6 +19,7 @@ import uuid
 from decimal import Decimal
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -62,19 +63,57 @@ class InventoryService:
         if delta == 0:
             raise ValidationError("Delta must be non-zero.", code="ZERO_DELTA")
 
-        # Load or create the balance row for this pair. Kept inside the caller's
-        # transaction so the read-modify-write is atomic. Under contention, wrap
-        # in SELECT ... FOR UPDATE (Postgres) for multi-writer safety.
-        balance = await self.db.scalar(
+        # Load or create the balance row for this pair, inside the caller's
+        # transaction so the ledger and the balance can never diverge.
+        #
+        # CONCURRENCY (proved necessary against real PostgreSQL): two sales for
+        # the same variant and store, rung up at the same moment on different
+        # terminals, race here in two separate ways.
+        #
+        #   1. Both see no balance row and both INSERT -> one of them dies on
+        #      uq_stock_balances_variant_store and takes an otherwise valid
+        #      sale down with it.
+        #   2. Both read the same quantity and both write back -> one movement
+        #      is silently lost and stock drifts from reality.
+        #
+        # The SAVEPOINT handles (1): if we lose the insert race only the
+        # savepoint unwinds, leaving the caller's transaction - and the sale
+        # being written - untouched. SELECT ... FOR UPDATE handles (2) by
+        # serialising the read-modify-write on the row itself.
+        existing = await self.db.scalar(
             select(StockBalance).where(
                 StockBalance.variant_id == variant_id,
                 StockBalance.store_id == store_id,
             )
         )
-        if balance is None:
-            balance = StockBalance(variant_id=variant_id, store_id=store_id, quantity=_ZERO)
-            self.db.add(balance)
-            await self.db.flush()
+        if existing is None:
+            try:
+                async with self.db.begin_nested():
+                    self.db.add(
+                        StockBalance(
+                            variant_id=variant_id, store_id=store_id, quantity=_ZERO
+                        )
+                    )
+            except IntegrityError:
+                # A concurrent writer created it first. That is a success for
+                # our purposes: the row we needed now exists.
+                pass
+
+        # Re-read under a row lock. with_for_update() is a no-op on SQLite,
+        # which serialises writers at the file level anyway.
+        balance = await self.db.scalar(
+            select(StockBalance)
+            .where(
+                StockBalance.variant_id == variant_id,
+                StockBalance.store_id == store_id,
+            )
+            .with_for_update()
+        )
+        if balance is None:  # pragma: no cover - the upsert above guarantees it
+            raise ConflictError(
+                "Stock balance row could not be established.",
+                code="STOCK_BALANCE_UNAVAILABLE",
+            )
 
         new_qty = (balance.quantity or _ZERO) + delta
         if new_qty < 0 and not allow_negative:

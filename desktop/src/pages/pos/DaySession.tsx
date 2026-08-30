@@ -15,9 +15,12 @@ import {
   closeSession,
   currentSession,
   openSession,
+  recentSessions,
   sessionSummary,
+  type DaySession as DaySessionType,
 } from '@/lib/day-sessions-api';
 import { listStores } from '@/lib/stores-api';
+import { RestatementBanner, RestatementHistory } from '@/pages/pos/SessionRestatement';
 
 const LAST_STORE_KEY = 'retailos.pos.last_store_id';
 
@@ -51,7 +54,16 @@ export function DaySessionPage(): JSX.Element {
     enabled: !!sessionQuery.data,
   });
 
+  // `/current` returns only the OPEN session, so the last CLOSED shift has to
+  // be fetched separately — otherwise a restated shift is invisible.
+  const recentQuery = useQuery({
+    queryKey: ['day-session', 'recent', storeId],
+    queryFn: () => recentSessions(storeId, 5),
+    enabled: !!storeId,
+  });
+
   const isOpen = sessionQuery.data?.status === 'open';
+  const lastClosed = (recentQuery.data ?? []).find((s) => s.status === 'closed') ?? null;
 
   return (
     <div className="space-y-6">
@@ -80,6 +92,13 @@ export function DaySessionPage(): JSX.Element {
 
       {storeId && sessionQuery.isLoading && (
         <div className="text-sm text-slate-500">Checking session…</div>
+      )}
+
+      {/* A CLOSED session used to be invisible: the page jumped straight to
+          "open a new one", so a shift whose figures had been restated after
+          sign-off could not be seen at all. */}
+      {storeId && !sessionQuery.isLoading && !isOpen && lastClosed && (
+        <ClosedSessionCard session={lastClosed} />
       )}
 
       {storeId && !sessionQuery.isLoading && !isOpen && (
@@ -112,6 +131,61 @@ export function DaySessionPage(): JSX.Element {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * The last shift, after it was closed.
+ *
+ * Read-only. Every figure is printed exactly as the server stored it — this
+ * screen never recalculates cash, because a second implementation of the
+ * expected-cash rule would eventually disagree with the first and the
+ * disagreement would look like a till discrepancy.
+ */
+function ClosedSessionCard({ session }: { session: DaySessionType }): JSX.Element {
+  const diff = Number(session.cash_diff ?? '0') || 0;
+
+  return (
+    <GlassCard className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-lg font-semibold text-white">
+            <DoorClosed className="h-5 w-5 text-slate-400" />
+            Last session — closed
+            {session.restated_at && (
+              <span className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300">
+                Restated
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-slate-400">
+            Opened {new Date(session.opened_at).toLocaleString()}
+            {session.closed_at && ` · closed ${new Date(session.closed_at).toLocaleString()}`}
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-xs uppercase tracking-wider text-slate-500">Difference</div>
+          <div
+            className={`font-mono text-lg font-semibold ${
+              diff === 0 ? 'text-slate-200' : diff > 0 ? 'text-emerald-300' : 'text-rose-300'
+            }`}
+          >
+            ₹{session.cash_diff ?? '—'}
+          </div>
+        </div>
+      </div>
+
+      {session.restated_at && <RestatementBanner restatedAt={session.restated_at} />}
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat label="Opening cash" value={`₹${session.opening_cash}`} />
+        <Stat label="Expected" value={session.expected_cash ? `₹${session.expected_cash}` : '—'} />
+        <Stat label="Counted" value={session.counted_cash ? `₹${session.counted_cash}` : '—'} />
+        <Stat label="Difference" value={session.cash_diff ? `₹${session.cash_diff}` : '—'} />
+      </div>
+
+      <RestatementHistory sessionId={session.id} />
+    </GlassCard>
   );
 }
 

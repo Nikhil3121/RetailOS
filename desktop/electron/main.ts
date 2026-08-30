@@ -13,6 +13,12 @@ import { app, BrowserWindow, ipcMain, safeStorage, shell } from 'electron';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import { databaseService } from './database/database-service';
+import { log } from './database/logger';
+import { backupScheduler } from './database/backup-service';
+import { registerDatabaseIpc } from './ipc/register';
+import { logResolvedConfig } from './pos-config';
+
 const isDev = !app.isPackaged;
 // Must match `server.port` in vite.config.ts. 5273 is RetailOS-specific —
 // port 5173 (Vite's default) is contested by other Vite projects on this
@@ -167,12 +173,43 @@ app.whenReady()
     // renderer's mount-time load call always finds a handler on the other
     // end. Otherwise the first launch's remember-me lookup would fail.
     registerCredentialHandlers();
+
+    // Database + device identity. initialize() never throws — a failure is
+    // recorded and reported through database:status. The existing HTTP
+    // billing path does not depend on SQLite, so a database problem must not
+    // stop the app from opening.
+    const dbResult = databaseService.initialize();
+    if (!dbResult.ready) {
+      log.warn('startup.database_unavailable', { error_message: dbResult.error });
+    }
+
+    registerDatabaseIpc();
+
+    // Periodic local backups. Started only when the database is actually
+    // usable — backing up a database that failed to open would rotate good
+    // copies out of retention in exchange for nothing. Unlike sync this needs
+    // no access token, so it runs whether or not a window is open.
+    if (dbResult.ready) {
+      backupScheduler.start();
+    }
+
+    logResolvedConfig();
+
     return createMainWindow();
   })
   .catch((err) => {
     console.error('Failed to create main window', err);
     app.exit(1);
   });
+
+// Close the SQLite handle cleanly so WAL is checkpointed rather than left for
+// recovery on next open.
+app.on('will-quit', () => {
+  // Stop the timer BEFORE closing the handle, so a tick cannot fire against a
+  // database that is midway through shutting down.
+  backupScheduler.stop();
+  databaseService.shutdown();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

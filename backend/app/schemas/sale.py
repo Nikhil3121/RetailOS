@@ -25,6 +25,36 @@ class SaleLineInput(BaseModel):
         description="Overrides the variant's selling_price when supplied.",
     )
     discount_pct: Decimal = Field(default=_ZERO, ge=0, le=100, decimal_places=2, max_digits=5)
+    # ---- offline synchronisation (Phase 5B) --------------------------------
+    # Both fields are OPTIONAL and default to None, so an online bill posted by
+    # the Billing UI behaves exactly as it always has. They exist so a sale
+    # completed OFFLINE can be recorded as the transaction that actually
+    # happened, rather than as one the server re-derives from today's catalog.
+    line_total: Decimal | None = Field(
+        default=None,
+        ge=0,
+        decimal_places=2,
+        max_digits=14,
+        description=(
+            "Authoritative amount charged for this line, from the offline "
+            "receipt. Supplied because a shelf price is often a ROUNDED figure "
+            "- MRP 343 less 30% is 240.10, but the customer is charged 240.00 - "
+            "and the server has no other way to know what was actually taken. "
+            "Validated against the derived value; never silently adjusted."
+        ),
+    )
+    tax_rate: Decimal | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        decimal_places=2,
+        max_digits=5,
+        description=(
+            "GST rate in force AT THE TIME OF SALE. Supplied so a later catalog "
+            "tax-rate change cannot rewrite the tax on a historical bill that "
+            "has already been printed and handed to a customer."
+        ),
+    )
 
 
 class SalePaymentInput(BaseModel):
@@ -49,6 +79,41 @@ class SaleCreate(BaseModel):
     # already stored a sale under this key it returns the existing row instead
     # of ringing it up twice.
     client_uuid: str | None = Field(default=None, max_length=64)
+
+    # ---- explicit offline attribution (Phase 5E) ---------------------------
+    # All three are OPTIONAL. Omit them and the endpoint behaves exactly as it
+    # always has, which is what keeps the online Billing UI working untouched.
+    day_session_id: uuid.UUID | None = Field(
+        default=None,
+        description=(
+            "The session that was open WHEN THE SALE HAPPENED. Supplied by an "
+            "offline terminal so a bill rung up last night is booked against "
+            "last night's shift instead of whichever session happens to be "
+            "open when the terminal reconnects. Validated against store "
+            "ownership; may reference a CLOSED session, which triggers an "
+            "audited restatement. Never inferred, never substituted."
+        ),
+    )
+    occurred_at: datetime | None = Field(
+        default=None,
+        description=(
+            "When the sale actually happened. Preserved verbatim and used for "
+            "the invoice month, so a 31 March bill synced on 1 April keeps a "
+            "March invoice number. Never used to infer the day session - "
+            "attribution is explicit via day_session_id."
+        ),
+    )
+    terminal_uuid: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+        description=(
+            "Device identity of the till that rang the sale (the terminal's "
+            "device_uuid). Recorded so per-terminal cash reconciliation is "
+            "possible; two distinct devices are never normalised into one."
+        ),
+    )
 
 
 class SaleVoidRequest(BaseModel):
@@ -112,6 +177,8 @@ class SaleRead(ORMModel):
     created_by_user_id: uuid.UUID | None
     salesperson_user_id: uuid.UUID | None
     client_uuid: str | None = None
+    occurred_at: datetime | None = None
+    terminal_uuid: str | None = None
     lines: list[SaleLineRead] = Field(default_factory=list)
     payments: list[SalePaymentRead] = Field(default_factory=list)
     created_at: datetime

@@ -12,7 +12,7 @@ from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 
-from sqlalchemy import ForeignKey, Numeric, String, Text, TypeDecorator, Uuid
+from sqlalchemy import ForeignKey, Index, Numeric, String, Text, TypeDecorator, Uuid, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, UUIDPKMixin, UtcDateTime
@@ -42,6 +42,19 @@ class _DayStatusType(TypeDecorator):
 
 class DaySession(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "day_sessions"
+    __table_args__ = (
+        # The service checks for an existing open session before inserting, but
+        # two concurrent opens can both pass that check. A partial unique index
+        # makes the invariant the database's job: at most one OPEN row per
+        # store, whatever the application does.
+        Index(
+            "uq_day_sessions_one_open_per_store",
+            "store_id",
+            unique=True,
+            postgresql_where=text("status = 'open'"),
+            sqlite_where=text("status = 'open'"),
+        ),
+    )
 
     store_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
@@ -73,3 +86,12 @@ class DaySession(UUIDPKMixin, TimestampMixin, Base):
     cash_diff: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # ---- restatement (Phase 5E) --------------------------------------------
+    # Set when a late-arriving offline sale is attributed to this session AFTER
+    # it was closed. expected_cash and cash_diff are then recomputed, so this
+    # flags that the shift's figures are no longer the ones produced at close.
+    # The previous values, the sale that caused the change and the reason all
+    # live in audit_logs - reusing the existing audit trail rather than adding
+    # shadow accounting columns here.
+    restated_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)

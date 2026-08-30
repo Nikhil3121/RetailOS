@@ -35,6 +35,12 @@ class DaySessionRead(ORMModel):
     counted_cash: Decimal | None
     expected_cash: Decimal | None
     cash_diff: Decimal | None
+    # Set when a late-arriving offline sale restated this shift AFTER it was
+    # closed. Read-only and purely informational: exposing it lets the UI say
+    # that expected_cash and cash_diff are no longer the figures produced at
+    # close, which otherwise looks like the numbers changed by themselves.
+    # The full before/after detail lives in audit_logs (day_session.restated).
+    restated_at: datetime | None = None
     notes: str | None
     created_at: datetime
 

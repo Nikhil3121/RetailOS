@@ -71,8 +71,7 @@ class DaySessionService:
             )
 
         # Expected cash = opening + cash payments received during the session.
-        cash_taken = await self._cash_taken_during(session_id)
-        expected = session.opening_cash + cash_taken
+        expected = await self.recompute_expected_cash(session)
 
         session.status = DayStatus.CLOSED
         session.closed_by_user_id = user_id
@@ -86,6 +85,33 @@ class DaySessionService:
             )
         await self.db.flush()
         return session
+
+    async def recent_for_store(
+        self, store_id: uuid.UUID, limit: int = 10
+    ) -> list[DaySession]:
+        """Recent sessions for a store, newest first. Read-only.
+
+        `get_open_for_store` deliberately returns only the OPEN session, which
+        left a closed shift - including one restated after close - impossible
+        for any client to display. This is the read path for that.
+        """
+        rows = await self.db.scalars(
+            select(DaySession)
+            .where(DaySession.store_id == store_id)
+            .order_by(DaySession.opened_at.desc())
+            .limit(limit)
+        )
+        return list(rows.all())
+
+    async def recompute_expected_cash(self, session: DaySession) -> Decimal:
+        """Opening float plus every cash payment booked against this session.
+
+        Public because a late-arriving offline sale has to restate a closed
+        shift, and that restatement must use the SAME arithmetic the original
+        close used. Two implementations would eventually disagree, and the
+        disagreement would look like a till discrepancy.
+        """
+        return session.opening_cash + await self._cash_taken_during(session.id)
 
     async def get_open_for_store(self, store_id: uuid.UUID) -> DaySession | None:
         return await self._get_open_for_store(store_id)

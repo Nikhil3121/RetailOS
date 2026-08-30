@@ -20,6 +20,7 @@ import { Reports } from '@/pages/Reports';
 import { Settings } from '@/pages/Settings';
 import { Stores } from '@/pages/Stores';
 import { Suppliers } from '@/pages/Suppliers';
+import { HardwareDiagnostics } from '@/pages/settings/HardwareDiagnostics';
 import { SystemStatus } from '@/pages/SystemStatus';
 import { Users } from '@/pages/Users';
 import { ForgotPassword } from '@/pages/auth/ForgotPassword';
@@ -34,6 +35,7 @@ import { Billing } from '@/pages/billing/Billing';
 import { OutstandingDues } from '@/pages/billing/OutstandingDues';
 import { DaySessionPage } from '@/pages/pos/DaySession';
 import { Invoice } from '@/pages/pos/Invoice';
+import { LocalInvoice } from '@/pages/pos/LocalInvoice';
 import { Sales } from '@/pages/pos/Sales';
 import { PurchaseEditor } from '@/pages/purchases/PurchaseEditor';
 import { Purchases } from '@/pages/purchases/Purchases';
@@ -76,7 +78,10 @@ export const router = createHashRouter([
           { path: 'billing/outstanding', element: <OutstandingDues /> },
           { path: 'sales', element: <Sales /> },
           { path: 'sales/:id/invoice', element: <Invoice /> },
+          // Offline receipt — reads the durable SQLite sale, no network.
+          { path: 'sales/local/:id/invoice', element: <LocalInvoice /> },
           { path: 'system', element: <SystemStatus /> },
+          { path: 'hardware', element: <HardwareDiagnostics /> },
           { path: 'stores', element: <Stores /> },
           { path: 'settings', element: <Settings /> },
           { path: 'change-password', element: <ChangePassword /> },

@@ -32,6 +32,23 @@ async def get_current(
     return DaySessionRead.model_validate(session) if session else None
 
 
+@router.get(
+    "",
+    response_model=list[DaySessionRead],
+    summary="Recent sessions for a store, newest first (open and closed).",
+    dependencies=[Depends(require_min_role(UserRole.CASHIER))],
+)
+async def list_sessions(
+    db: DbSession,
+    store_id: uuid.UUID = Query(...),
+    limit: int = Query(10, ge=1, le=100),
+) -> list[DaySessionRead]:
+    """Read-only. Lets a client show the LAST shift and whether it was
+    restated, which `/current` cannot do because it returns only OPEN rows."""
+    sessions = await DaySessionService(db).recent_for_store(store_id, limit)
+    return [DaySessionRead.model_validate(s) for s in sessions]
+
+
 @router.post(
     "/open",
     response_model=DaySessionRead,

@@ -20,7 +20,9 @@ from app.schemas.product import (
     VariantRead,
     VariantUpdate,
 )
+from app.schemas.product_import import ProductImportRequest, ProductImportResult
 from app.services.product import ProductService
+from app.services.product_import import ProductImportService
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -64,6 +66,26 @@ async def list_products(
 async def create_product(payload: ProductCreate, db: DbSession) -> ProductRead:
     product = await ProductService(db).create(payload)
     return ProductRead.model_validate(product)
+
+
+@router.post(
+    "/import",
+    response_model=ProductImportResult,
+    summary="Bulk-import a catalog from CSV. Dry run by default.",
+    dependencies=[Depends(require_min_role(UserRole.MANAGER))],
+)
+async def import_products(
+    payload: ProductImportRequest, db: DbSession
+) -> ProductImportResult:
+    """Import a shop's catalog.
+
+    MANAGER and above, matching single-product creation — a cashier must not be
+    able to rewrite the catalog they are selling from.
+
+    Declared BEFORE `/{product_id}` on purpose: FastAPI matches routes in
+    order, and a later declaration would make "import" be read as a product id.
+    """
+    return await ProductImportService(db).run(payload)
 
 
 @router.get(

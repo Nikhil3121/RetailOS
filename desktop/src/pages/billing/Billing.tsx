@@ -22,12 +22,19 @@ import {
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Input } from '@/components/ui/Input';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Select } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Textarea';
 import { ApiError } from '@/lib/api';
+import { decideAdd, type AddSource } from '@/lib/cart-rules';
+import { cashSuggestions, presentLine, summariseSavings } from '@/lib/cart-presentation';
+import { commitLocalSale, isLocalCheckoutAvailable } from '@/lib/local-checkout';
+import { useDeviceIdentity } from '@/hooks/useDeviceIdentity';
+import { toPickerVariant } from '@/lib/local-catalog-adapter';
+import { useLocalCatalog } from '@/hooks/useLocalCatalog';
 import { getProduct, listProducts } from '@/lib/catalog-api';
 import { listCustomers } from '@/lib/customers-api';
 import { currentSession } from '@/lib/day-sessions-api';
@@ -66,6 +73,10 @@ interface BillLine {
   tax_rate: string;
   quantity: number;
   discount_pct: number;
+  // Snapshotted onto the bill at sale time. A later catalog edit must not be
+  // able to rewrite a receipt that has already been handed to a customer.
+  mrp?: string | null;
+  hsn_code?: string | null;
 }
 
 interface PickerVariant {
@@ -76,6 +87,8 @@ interface PickerVariant {
   variant_name: string;
   unit_price: string;
   tax_rate: string;
+  mrp?: string | null;
+  hsn_code?: string | null;
 }
 
 interface Totals {
@@ -146,6 +159,10 @@ export function Billing(): JSX.Element {
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
 
+  // Local SQLite catalog. `ready` is true only when a catalog has actually
+  // been synced — a NOT_INITIALIZED terminal keeps using the online path.
+  const localCatalog = useLocalCatalog();
+
   // -----------------------------------------------------------------------
   // Store + session
   // -----------------------------------------------------------------------
@@ -173,6 +190,7 @@ export function Billing(): JSX.Element {
   // banner behind. Cache-invalidation from that screen fires the refetch too,
   // but this guarantees freshness even if the user navigates in the middle
   // of an in-flight mutation.
+  const deviceIdentity = useDeviceIdentity();
   const sessionQuery = useQuery({
     queryKey: ['day-session', 'current', storeId],
     queryFn: () => currentSession(storeId),
@@ -362,6 +380,9 @@ export function Billing(): JSX.Element {
     setAmountPaid(totals.grand > 0 ? totals.grand.toFixed(2) : '');
   }, [totals.grand]);
 
+  // Presentation only — the authoritative totals stay in computeTotals.
+  const savings = useMemo(() => summariseSavings(lines), [lines]);
+
   const paidNum = Number(amountPaid) || 0;
   const balanceDue = Math.max(round(totals.grand - paidNum), 0);
   const change = Math.max(round(paidNum - totals.grand), 0);
@@ -379,6 +400,7 @@ export function Billing(): JSX.Element {
   const [debouncedQ, setDebouncedQ] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
+  const amountRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     searchRef.current?.focus();
@@ -429,6 +451,8 @@ export function Billing(): JSX.Element {
             variant_name: v.name,
             unit_price: v.selling_price,
             tax_rate: full.tax_rate,
+            mrp: v.mrp ?? null,
+            hsn_code: full.hsn_code ?? null,
           });
         }
       }
@@ -466,10 +490,28 @@ export function Billing(): JSX.Element {
   const [scannerFocused, setScannerFocused] = useState(false);
   const [lastAddedSku, setLastAddedSku] = useState<string | null>(null);
 
-  function addVariant(v: PickerVariant): void {
+  /**
+   * Add a variant to the cart.
+   *
+   * `source` decides what happens when the variant is already on the bill:
+   * a repeated SCAN is refused (almost always an accidental double-trigger),
+   * while a repeated manual pick still increments, which is how cashiers
+   * build quantity from the picker today. See lib/cart-rules.ts.
+   */
+  function addVariant(v: PickerVariant, source: AddSource = 'manual'): void {
+    const decision = decideAdd(lines, v.variant_id, source);
+
+    if (decision.action === 'reject') {
+      setFlash({ kind: 'info', text: decision.message });
+      setQ('');
+      // Refocus so the next scan still lands — a refused duplicate must not
+      // leave the cashier having to click back into the field.
+      setTimeout(() => searchRef.current?.focus(), 0);
+      return;
+    }
+
     setLines((ls) => {
-      const existing = ls.find((l) => l.variant_id === v.variant_id);
-      if (existing) {
+      if (decision.action === 'increment') {
         return ls.map((l) =>
           l.variant_id === v.variant_id
             ? { ...l, quantity: l.quantity + 1 }
@@ -485,6 +527,8 @@ export function Billing(): JSX.Element {
           variant_name: v.variant_name,
           unit_price: v.unit_price,
           tax_rate: v.tax_rate,
+          mrp: v.mrp ?? null,
+          hsn_code: v.hsn_code ?? null,
           quantity: 1,
           discount_pct: 0,
         },
@@ -498,7 +542,15 @@ export function Billing(): JSX.Element {
     setTimeout(() => setLastAddedSku((cur) => (cur === v.sku ? null : cur)), 1200);
   }
 
-  function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>): void {
+  async function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>): Promise<void> {
+    if (e.key === 'Escape') {
+      // Clears a mistyped search or a partial scan. Deliberately does NOT
+      // touch the cart — Escape should never destroy a bill.
+      e.preventDefault();
+      setQ('');
+      setActiveIdx(0);
+      return;
+    }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setActiveIdx((i) => Math.min(i + 1, filtered.length - 1));
@@ -513,13 +565,44 @@ export function Billing(): JSX.Element {
       const raw = (e.currentTarget.value ?? q).trim();
       if (!raw) return;
       const query = raw.toLowerCase();
-      const exact = variants.find(
-        (v) =>
-          v.sku.toLowerCase() === query ||
-          (v.barcode && v.barcode.toLowerCase() === query),
+      // ---- LOCAL CATALOG FIRST (Phase 4) -------------------------------
+      //
+      // When a catalog has been synced, an exact barcode resolves from SQLite
+      // with no network call at all. This is what makes scanning work during
+      // an outage. Access goes through useLocalCatalog -> catalog-service, so
+      // window.retailos is never touched from this component.
+      if (localCatalog.ready) {
+        const local = await localCatalog.lookup(raw);
+        if (local && local.barcode && local.barcode.toLowerCase() === query) {
+          addVariant(toPickerVariant(local), 'barcode-scan');
+          return;
+        }
+        // A local SKU hit is manual entry, not a scan — same rule as below.
+        if (local) {
+          addVariant(toPickerVariant(local), 'manual');
+          return;
+        }
+        // Not in the local catalog: fall through to the online result set
+        // rather than failing. Never silently turn every scan into a request.
+      }
+
+      // Barcode is checked FIRST and separately from SKU. A scanner emits a
+      // barcode, so only that match counts as 'barcode-scan' and is subject
+      // to the duplicate rule. Checking it first also makes precedence
+      // explicit when a string happens to be one variant's barcode and
+      // another's SKU — the scanner's reading wins.
+      const barcodeMatch = variants.find(
+        (v) => v.barcode && v.barcode.toLowerCase() === query,
       );
-      if (exact) {
-        addVariant(exact);
+      if (barcodeMatch) {
+        addVariant(barcodeMatch, 'barcode-scan');
+        return;
+      }
+      // An exact SKU typed by hand is deliberate manual entry, not a scan —
+      // it keeps the pre-existing increment behaviour.
+      const skuMatch = variants.find((v) => v.sku.toLowerCase() === query);
+      if (skuMatch) {
+        addVariant(skuMatch, 'manual');
         return;
       }
       // Fall back to a substring match against the whole scanned string,
@@ -550,6 +633,14 @@ export function Billing(): JSX.Element {
   // Save
   // -----------------------------------------------------------------------
   const [error, setError] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmDue, setConfirmDue] = useState(false);
+  // Internal id of the locally-committed sale. Survives a network failure,
+  // so the receipt can be rendered from SQLite when the server never replied.
+  // Id of the last locally-committed sale. A ref rather than state: the save
+  // mutation's onError closes over a stale state value, and nothing renders
+  // from this — it only decides which receipt route to open.
+  const lastCommittedSaleIdRef = useRef<string | null>(null);
 
   const save = useMutation({
     mutationFn: (body: SaleCreate) => createSale(body),
@@ -568,7 +659,14 @@ export function Billing(): JSX.Element {
       // idempotency key on the body guarantees no duplicate on replay.
       if (!(err instanceof ApiError)) {
         enqueueBill(body);
+        const localId = lastCommittedSaleIdRef.current;
         resetBillState();
+        // The sale is durable locally even though the server never replied.
+        // Show that receipt rather than leaving the counter with nothing.
+        if (localId) {
+          navigate(`/sales/local/${localId}/invoice`);
+          return;
+        }
         return;
       }
       setError(err.message || 'Failed to save bill.');
@@ -638,7 +736,10 @@ export function Billing(): JSX.Element {
       setFlash({ kind: 'info', text: 'Nothing to print — cart is empty.' });
       return;
     }
-    onSave();
+    // Same gate as F7 and the button: a credit sale is confirmed however it
+    // was triggered, so the guard cannot be bypassed by pressing a different
+    // key for the same action.
+    requestSave();
   }
 
   // Screen-local shortcuts — the "why" for each key:
@@ -646,8 +747,13 @@ export function Billing(): JSX.Element {
   //   F10      = Print — saves the current cart, receipt prints after success
   //   F3       = Hold Bill  (park cart, serve next customer, resume later)
   //   Shift+F3 = open the Held Bills panel to resume one
-  useHotkey('F7', () => onSave());
+  useHotkey('F7', () => requestSave());
   useHotkey('F10', () => onPrint());
+  //   F4       = jump to Amount received, so cash can be keyed without the mouse
+  useHotkey('F4', () => {
+    amountRef.current?.focus();
+    amountRef.current?.select();
+  });
   useHotkey('F3', (e) => {
     if (e.shiftKey) {
       setHeldOpen(true);
@@ -656,7 +762,27 @@ export function Billing(): JSX.Element {
     }
   });
 
-  function onSave(): void {
+  /**
+   * The save entry point for the button and F7.
+   *
+   * Runs the cheap validations first so a problem is reported immediately
+   * rather than behind a dialog, then asks for confirmation ONLY when the
+   * bill leaves money uncollected. Everything else goes straight through.
+   */
+  function requestSave(): void {
+    if (lines.length === 0) {
+      setError('Add at least one product to the bill.');
+      return;
+    }
+    if (isDue) {
+      setError(null);
+      setConfirmDue(true);
+      return;
+    }
+    void onSave();
+  }
+
+  async function onSave(): Promise<void> {
     setError(null);
     if (!storeId) {
       setError('Select a store first.');
@@ -691,6 +817,9 @@ export function Billing(): JSX.Element {
       });
     }
 
+    const clientUuid = newClientUuid();
+    // Captured synchronously — setState is async and cannot be read back below.
+    let committedSaleId: string | null = null;
     const body: SaleCreate = {
       store_id: storeId,
       customer_id: customerId || null,
@@ -704,16 +833,78 @@ export function Billing(): JSX.Element {
       })),
       payments,
       // Stamp every attempt with the same idempotency key so an eventual
-      // replay from the offline queue collapses to a single sale row.
-      client_uuid: newClientUuid(),
+      // replay from the offline queue collapses to a single sale row. The
+      // SAME key is used for the local SQLite row id, so the local and
+      // remote records are provably the same sale.
+      client_uuid: clientUuid,
     };
 
-    // Offline gate — if the browser already knows we're offline, skip the
-    // fetch and queue directly. The auto-sync installer will drain the queue
-    // when the network is back.
+    // ---- PHASE 4: LOCAL-FIRST COMMIT ------------------------------------
+    //
+    // The sale is written to SQLite BEFORE any network call. Once this
+    // returns ok, the bill is durable: it survives a crash, a power cut and
+    // an indefinite outage, and it is already queued for sync. The network
+    // is no longer on the critical path of completing a bill.
+    //
+    // Previously an offline bill was pushed to a localStorage queue and the
+    // form cleared with NO receipt shown — a cashier was left holding cash
+    // with nothing to hand the customer. That path is gone.
+    if (isLocalCheckoutAvailable()) {
+      const local = await commitLocalSale({
+        clientUuid,
+        lines,
+        totals,
+        paymentMethod: method,
+        amountPaid: paidNum,
+        storeId: storeId || null,
+        terminalId: null, // local FK into `terminal`; identity travels as terminalUuid
+        // THE PHASE 5E INVARIANT. The session open RIGHT NOW, at the moment
+        // the bill is rung up, travels with the sale. It is never re-resolved
+        // at sync time — that is what moved last night's takings into today's
+        // shift and corrupted the cash reconciliation of both days.
+        daySessionId: sessionQuery.data?.id ?? null,
+        terminalUuid: deviceIdentity?.deviceUuid ?? null,
+        occurredAt: new Date().toISOString(),
+        // These are SERVER uuids. They are recorded in dedicated non-FK
+        // columns (migrations 004/005) rather than the local FK columns, so
+        // a bill can name its customer and salesperson before those tables
+        // are synced locally. Dropping them here made them unrecoverable.
+        customerId: customerId || null,
+        salespersonUserId: salespersonId || null,
+        paymentReference: method === 'cash' ? null : reference.trim() || null,
+        notes: notes.trim() || null,
+      });
+
+      if (!local.ok) {
+        // Refuse rather than proceed. A bill we cannot store locally is a
+        // bill we could lose, and losing it silently is worse than stopping.
+        setError(local.error ?? 'Could not save the bill locally.');
+        return;
+      }
+
+      committedSaleId = local.saleId;
+      lastCommittedSaleIdRef.current = local.saleId;
+    }
+
+    // Offline: the bill is already durable locally. Keep the existing
+    // localStorage queue as well — Phase 5 will migrate it to the SQLite
+    // outbox, and removing it now would drop bills mid-upgrade.
     if (!navigator.onLine) {
+      // Keep the legacy localStorage queue as a second belt — Phase 5 will
+      // retire it. Removing it now would drop bills mid-upgrade.
       enqueueBill(body);
       resetBillState();
+
+      // THE FIX: the customer gets a receipt. The sale is already durable in
+      // SQLite, so this renders from local data with no network at all.
+      if (committedSaleId) {
+        navigate(`/sales/local/${committedSaleId}/invoice`);
+        return;
+      }
+      setFlash({
+        kind: 'success',
+        text: 'Bill saved offline. It will sync when the connection returns.',
+      });
       return;
     }
     save.mutate(body);
@@ -753,7 +944,7 @@ export function Billing(): JSX.Element {
       )}
       <PageHeader
         title="Billing"
-        description="Ring up a sale, print a bill, and save any unpaid balance as due — collect it later from Billing → Outstanding. Shortcuts: F2 new · F7 save · F10 print · F3 hold · Shift+F3 resume · F9 today's bills."
+        description="Ring up a sale, print a bill, and save any unpaid balance as due — collect it later from Billing → Outstanding. Shortcuts: F2 new · F4 amount · F7 save · F10 print · F3 hold · Shift+F3 resume · F9 today's bills."
         actions={
           <div className="flex items-center gap-2">
             {/* Held-bills pill: shown whenever there's at least one parked
@@ -1053,13 +1244,16 @@ export function Billing(): JSX.Element {
                   </thead>
                   <tbody>
                     {lines.map((l) => {
-                      // Tax-inclusive: the "total" column is just the
+                      // Tax-inclusive: the "total" column is the
                       // post-discount extended price — GST is already
                       // embedded in unit_price and shown separately in
                       // the totals card below.
-                      const price = Number(l.unit_price) || 0;
-                      const gross = price * l.quantity;
-                      const total = gross * (1 - l.discount_pct / 100);
+                      //
+                      // The same arithmetic as before, moved into a tested
+                      // module so the MRP/saving figures beside it cannot
+                      // drift from the line total they sit next to.
+                      const presented = presentLine(l);
+                      const total = presented.lineTotal;
                       return (
                         <tr
                           key={l.variant_id}
@@ -1073,6 +1267,21 @@ export function Billing(): JSX.Element {
                               {l.variant_name} ·{' '}
                               <span className="font-mono">{l.sku}</span>
                             </div>
+                            {/* The label's own story: what it was marked at,
+                                and what the customer is saving. Shown only
+                                when there IS a saving — "Saved Rs.0" is
+                                noise, and a line sold above MRP is not a
+                                discount. */}
+                            {presented.showsSaving && (
+                              <div className="mt-0.5 text-[11px]">
+                                <span className="text-slate-500 line-through">
+                                  MRP ₹{(presented.mrpTotal ?? 0).toFixed(2)}
+                                </span>
+                                <span className="ml-2 text-emerald-300">
+                                  Save ₹{(presented.savedAgainstMrp ?? 0).toFixed(2)}
+                                </span>
+                              </div>
+                            )}
                           </td>
                           <td className="px-3 py-2 text-right">
                             <QtyStepper
@@ -1160,6 +1369,19 @@ export function Billing(): JSX.Element {
               value={`₹${totals.grand.toFixed(2)}`}
               strong
             />
+            {/* What the customer saved against the printed MRP. Shown only
+                when at least one line has an MRP — a confident "You saved
+                Rs.0.00" on a cart with no MRP data would be misleading. */}
+            {savings.known && savings.totalSaved > 0 && (
+              <div className="mt-1 flex items-center justify-between rounded-lg bg-emerald-500/10 px-2 py-1">
+                <span className="text-[11px] font-medium text-emerald-300">
+                  You saved
+                </span>
+                <span className="font-mono text-sm font-semibold text-emerald-300">
+                  ₹{savings.totalSaved.toFixed(2)}
+                </span>
+              </div>
+            )}
           </dl>
 
           {/* Payment method */}
@@ -1194,6 +1416,7 @@ export function Billing(): JSX.Element {
           {/* Amount paid */}
           <div className="mt-4">
             <Input
+              ref={amountRef}
               label="Amount received"
               type="number"
               step="0.01"
@@ -1208,11 +1431,15 @@ export function Billing(): JSX.Element {
                 accent="cobalt"
               />
               <QuickChip onClick={() => setAmountPaid('0')} label="All due" accent="amber" />
-              {[100, 200, 500, 1000, 2000].map((v) => (
+              {/* Derived from THIS bill rather than a fixed list. A flat
+                  Rs.100/200 chip is useless on a Rs.240 bill — it is less
+                  than the total and can never be the amount tendered. These
+                  are the notes a customer would actually hand over. */}
+              {cashSuggestions(totals.grand).map((v) => (
                 <QuickChip
                   key={v}
                   onClick={() => setAmountPaid(v.toFixed(2))}
-                  label={`₹${v}`}
+                  label={`₹${v.toFixed(2).replace(/\.00$/, '')}`}
                 />
               ))}
             </div>
@@ -1291,20 +1518,65 @@ export function Billing(): JSX.Element {
             </div>
           )}
 
-          <div className="mt-4">
+          <div className="mt-4 space-y-2">
             <Button
               size="lg"
               className="w-full"
               loading={busy}
               disabled={busy || lines.length === 0}
               leadingIcon={<ReceiptText className="h-4 w-4" />}
-              onClick={onSave}
+              onClick={requestSave}
             >
               {isDue ? 'Save bill (with due)' : 'Save & print bill'}
+            </Button>
+            {/* Clearing is the only irreversible thing a cashier can do to a
+                cart, and previously the only way to undo a mis-scan was to
+                delete every line by hand. Disabled on an empty cart so it
+                cannot be pressed for no reason. */}
+            <Button
+              variant="ghost"
+              className="w-full"
+              disabled={busy || lines.length === 0}
+              leadingIcon={<Trash2 className="h-4 w-4" />}
+              onClick={() => setConfirmClear(true)}
+            >
+              Clear bill
             </Button>
           </div>
         </GlassCard>
       </div>
+
+      <ConfirmDialog
+        open={confirmClear}
+        onClose={() => setConfirmClear(false)}
+        title="Clear this bill?"
+        description={`${lines.length} ${lines.length === 1 ? 'item' : 'items'} will be removed. This cannot be undone — use Hold bill (F3) instead if you want to come back to it.`}
+        confirmLabel="Clear bill"
+        destructive
+        onConfirm={() => {
+          resetBillState();
+          setAmountPaid('');
+          setConfirmClear(false);
+          setFlash({ kind: 'info', text: 'Bill cleared.' });
+          setTimeout(() => searchRef.current?.focus(), 0);
+        }}
+      />
+
+      {/* Confirmation is deliberately limited to bills that leave money
+          uncollected. A fully paid sale stays a single keypress, because a
+          modal on every bill is friction a busy counter cannot afford — but
+          money walking out the door on credit deserves a deliberate yes. */}
+      <ConfirmDialog
+        open={confirmDue}
+        onClose={() => setConfirmDue(false)}
+        title="Save with an outstanding balance?"
+        description={`${customerName ?? 'This customer'} will owe ₹${balanceDue.toFixed(2)} of the ₹${totals.grand.toFixed(2)} total. It will appear under Billing → Outstanding to collect later.`}
+        confirmLabel="Save with due"
+        onConfirm={() => {
+          setConfirmDue(false);
+          void onSave();
+        }}
+      />
     </div>
   );
 }

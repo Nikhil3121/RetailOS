@@ -19,6 +19,7 @@ from datetime import date, datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -37,6 +38,8 @@ from app.db.models.sale import (
 )
 from app.db.models.store import Store
 from app.schemas.sale import SaleCreate, SaleSummary
+from app.services.audit import AuditService
+from app.services.day_session import DaySessionService
 from app.services.inventory import InventoryService
 
 
@@ -56,15 +59,20 @@ class SaleService:
     # Create
     # ------------------------------------------------------------------
     async def create(self, payload: SaleCreate, *, user_id: uuid.UUID | None) -> Sale:
-        # Idempotency: if the client sent a client_uuid we've already stored
-        # (an offline-queued bill replayed after the internet came back), skip
-        # the whole insert path and return the existing sale.
+        # Idempotency, fast path. A replayed offline bill short-circuits here
+        # BEFORE the day-session check, so a sale that already synced can still
+        # be acknowledged after the till has been closed for the night.
+        #
+        # This SELECT is an optimisation, NOT the correctness mechanism - two
+        # concurrent requests can both pass it. The UNIQUE constraint on
+        # client_uuid is what actually guarantees a single sale; see the
+        # IntegrityError handler around the flush below.
         if payload.client_uuid:
             existing = await self.db.scalar(
                 select(Sale).where(Sale.client_uuid == payload.client_uuid)
             )
             if existing is not None:
-                return await self.get(existing.id)
+                return await self._acknowledge_replay(existing, payload)
 
         store = await self.db.get(Store, payload.store_id)
         if store is None:
@@ -89,21 +97,52 @@ class SaleService:
                     code="SALESPERSON_INACTIVE",
                 )
 
-        # A sale is always attached to an OPEN session for that store.
-        session = await self.db.scalar(
-            select(DaySession)
-            .where(
-                DaySession.store_id == payload.store_id,
-                DaySession.status == DayStatus.OPEN,
+        # ---- day session attribution --------------------------------------
+        #
+        # Two paths, and the difference matters financially.
+        #
+        # EXPLICIT (offline terminal): the payload names the session that was
+        # open when the sale actually happened. That session is used even if it
+        # has since closed. It is never silently swapped for whatever is open
+        # now - doing so would book last night's takings into today's shift and
+        # corrupt the cash reconciliation of both.
+        #
+        # IMPLICIT (online billing, unchanged): no session supplied, so the
+        # store's currently open session is used, exactly as before.
+        restating_closed_session = False
+        if payload.day_session_id is not None:
+            session = await self.db.get(DaySession, payload.day_session_id)
+            if session is None:
+                raise NotFoundError(
+                    "Day session not found.", code="DAY_SESSION_NOT_FOUND"
+                )
+            # A client must never be able to book a sale against another
+            # store's shift, whatever it claims.
+            if session.store_id != payload.store_id:
+                raise ValidationError(
+                    "Day session does not belong to this store.",
+                    code="DAY_SESSION_STORE_MISMATCH",
+                    details={
+                        "day_session_id": str(payload.day_session_id),
+                        "store_id": str(payload.store_id),
+                    },
+                )
+            restating_closed_session = session.status is not DayStatus.OPEN
+        else:
+            session = await self.db.scalar(
+                select(DaySession)
+                .where(
+                    DaySession.store_id == payload.store_id,
+                    DaySession.status == DayStatus.OPEN,
+                )
+                .order_by(DaySession.opened_at.desc())
+                .limit(1)
             )
-            .order_by(DaySession.opened_at.desc())
-            .limit(1)
-        )
-        if session is None:
-            raise ConflictError(
-                "No open day session for this store — open one first.",
-                code="NO_OPEN_DAY_SESSION",
-            )
+            if session is None:
+                raise ConflictError(
+                    "No open day session for this store — open one first.",
+                    code="NO_OPEN_DAY_SESSION",
+                )
 
         # Load variants + parent products in one shot so we can snapshot every line.
         variant_ids = [line.variant_id for line in payload.lines]
@@ -135,14 +174,60 @@ class SaleService:
             price = item.unit_price if item.unit_price is not None else variant.selling_price
             gross = _round(price * item.quantity)
             disc_amt = _round(gross * (item.discount_pct / Decimal("100")))
+            derived_line_total = _round(gross - disc_amt)
+
+            # ---- offline authoritative line total (Phase 5B) --------------
+            # A shelf price is frequently a ROUNDED figure: the label reads
+            # MRP 343, 30% off, price 240, but 343 less 30% is 240.10. When a
+            # sale is completed offline the customer pays the rounded amount,
+            # and re-deriving the line here would record money that never
+            # changed hands. The supplied value therefore WINS - but only
+            # after it is proved to be a legitimate rounding.
+            if item.line_total is not None:
+                supplied = _round(item.line_total)
+                if supplied > gross:
+                    raise ValidationError(
+                        "Line total cannot exceed the pre-discount amount.",
+                        code="LINE_TOTAL_EXCEEDS_GROSS",
+                        details={
+                            "line": idx,
+                            "line_total": str(supplied),
+                            "gross": str(gross),
+                        },
+                    )
+                # A rounding to the whole rupee can move the figure by at most
+                # 0.99. Anything larger is not rounding - it is a defect or a
+                # tampered client - and is rejected loudly rather than stored.
+                if abs(supplied - derived_line_total) >= Decimal("1.00"):
+                    raise ValidationError(
+                        "Line total is not consistent with unit price and discount.",
+                        code="LINE_TOTAL_OUT_OF_RANGE",
+                        details={
+                            "line": idx,
+                            "supplied": str(supplied),
+                            "derived": str(derived_line_total),
+                        },
+                    )
+                line_total = supplied
+                # The supplied total is preserved EXACTLY. What gets adjusted
+                # is the derived discount amount, so that
+                # gross - discount == line_total still holds across the bill.
+                # discount_pct is stored as the cashier entered it.
+                disc_amt = _round(gross - line_total)
+            else:
+                line_total = derived_line_total
             # Tax-INCLUSIVE pricing (MS Mall + Indian textile convention):
             # unit_price already carries the GST embedded. `line_total` is
             # exactly what the customer pays. `subtotal` is the pre-tax base
             # derived by dividing out (1 + tax_rate/100) — this keeps the tax
             # amount honest for GST filing while showing the customer the
             # printed-on-the-tag price at the counter.
-            line_total = _round(gross - disc_amt)
-            divisor = Decimal("1") + product.tax_rate / Decimal("100")
+            # ---- historical tax snapshot (Phase 5B) ------------------------
+            # An offline bill carries the rate that was in force when it was
+            # printed. Without this, editing a product's tax_rate would silently
+            # restate the GST on every unsynced bill for that product.
+            tax_rate = item.tax_rate if item.tax_rate is not None else product.tax_rate
+            divisor = Decimal("1") + tax_rate / Decimal("100")
             net = _round(line_total / divisor) if divisor != 0 else line_total
             tax = _round(line_total - net)
 
@@ -157,7 +242,7 @@ class SaleService:
                     unit_price=price,
                     discount_pct=item.discount_pct,
                     discount_amount=disc_amt,
-                    tax_rate=product.tax_rate,
+                    tax_rate=tax_rate,
                     subtotal=net,
                     tax_amount=tax,
                     line_total=line_total,
@@ -189,6 +274,148 @@ class SaleService:
         # reports so it can be reconciled — instead of failing the sale.
         inventory = InventoryService(self.db)
         sale_id_placeholder = uuid.uuid4()  # links every movement to this sale row
+
+        # Stock reservation AND the sale insert run inside one SAVEPOINT.
+        #
+        # The savepoint is what makes losing the client_uuid race survivable.
+        # An outer rollback would undo the right rows, but it also EXPIRES every
+        # object in the session - including the authenticated user - and the
+        # endpoint still has work to do afterwards (audit logging, response
+        # serialisation). The next attribute touch would then try to refresh
+        # from the database outside async context and raise MissingGreenlet,
+        # turning a handled duplicate into a crashed request.
+        #
+        # Unwinding only to the savepoint discards this attempt's stock
+        # movements and sale row while leaving the session alive and its
+        # objects loaded.
+        try:
+            async with self.db.begin_nested():
+                await self._reserve_and_insert(
+                    payload=payload,
+                    lines=lines,
+                    store=store,
+                    session=session,
+                    inventory=inventory,
+                    sale_id=sale_id_placeholder,
+                    user_id=user_id,
+                    subtotal_net=subtotal_net,
+                    discount_total=discount_total,
+                    tax_total=tax_total,
+                    grand_total=grand_total,
+                    paid_total=paid_total,
+                    change_due=change_due,
+                    balance_due=balance_due,
+                )
+        except IntegrityError:
+            # Another request carrying the same client_uuid committed between
+            # our SELECT and our flush. The database - not the earlier read -
+            # decides, and it has just told us this sale already exists.
+            duplicate = await self.db.scalar(
+                select(Sale).where(Sale.client_uuid == payload.client_uuid)
+            )
+            if duplicate is None:
+                # Some other constraint fired. A 409 beats a 500.
+                raise ConflictError(
+                    "Sale could not be stored due to a conflicting record.",
+                    code="SALE_CONFLICT",
+                ) from None
+            return await self._acknowledge_replay(duplicate, payload)
+
+        # A late-arriving sale changes a shift whose books were already closed.
+        # Restate them explicitly and audibly rather than leaving figures that
+        # silently no longer match the sales attached to the session.
+        if restating_closed_session:
+            await self._restate_closed_session(
+                session=session,
+                sale_id=sale_id_placeholder,
+                user_id=user_id,
+            )
+
+        return await self.get(sale_id_placeholder)
+
+    async def _restate_closed_session(
+        self,
+        *,
+        session: DaySession,
+        sale_id: uuid.UUID,
+        user_id: uuid.UUID | None,
+    ) -> None:
+        """Recompute a closed shift's cash figures after a late sale lands.
+
+        WHAT IS PRESERVED: counted_cash, closed_at and closed_by_user_id are
+        untouched. What a human physically counted, and when they signed the
+        shift off, are facts and are not rewritten.
+
+        WHAT CHANGES: expected_cash (the till should have held this sale's cash
+        too) and therefore cash_diff. Both are recomputed with the same
+        arithmetic the original close used.
+
+        WHY IT IS AUDITED: a shift's numbers moving after it was signed off is
+        exactly the kind of change that must never happen quietly. The audit row
+        records which sale caused it, which session moved, when, and both the
+        before and after figures.
+        """
+        previous_expected = session.expected_cash
+        previous_diff = session.cash_diff
+
+        new_expected = await DaySessionService(self.db).recompute_expected_cash(session)
+        session.expected_cash = new_expected
+        session.cash_diff = (
+            session.counted_cash - new_expected
+            if session.counted_cash is not None
+            else None
+        )
+        session.restated_at = datetime.now(timezone.utc)
+
+        await AuditService(self.db).log(
+            action="day_session.restated",
+            entity_type="day_session",
+            entity_id=session.id,
+            summary=(
+                f"Late-arriving offline sale restated closed session "
+                f"{session.id}."
+            ),
+            changes={
+                "reason": "late_arriving_offline_sale",
+                "caused_by_sale_id": str(sale_id),
+                "day_session_id": str(session.id),
+                "restated_at": session.restated_at.isoformat(),
+                "previous_expected_cash": (
+                    str(previous_expected) if previous_expected is not None else None
+                ),
+                "new_expected_cash": str(new_expected),
+                "previous_cash_diff": (
+                    str(previous_diff) if previous_diff is not None else None
+                ),
+                "new_cash_diff": (
+                    str(session.cash_diff) if session.cash_diff is not None else None
+                ),
+                "counted_cash_unchanged": (
+                    str(session.counted_cash) if session.counted_cash is not None else None
+                ),
+            },
+        )
+        await self.db.flush()
+
+    async def _reserve_and_insert(
+        self,
+        *,
+        payload: SaleCreate,
+        lines: list[SaleLine],
+        store: Store,
+        session: DaySession,
+        inventory: InventoryService,
+        sale_id: uuid.UUID,
+        user_id: uuid.UUID | None,
+        subtotal_net: Decimal,
+        discount_total: Decimal,
+        tax_total: Decimal,
+        grand_total: Decimal,
+        paid_total: Decimal,
+        change_due: Decimal,
+        balance_due: Decimal,
+    ) -> None:
+        """Reserve stock and insert the sale. Always called inside a SAVEPOINT."""
         for line in lines:
             await inventory.post_movement(
                 variant_id=line.variant_id,
@@ -197,17 +424,21 @@ class SaleService:
                 kind=MovementKind.SALE,
                 unit_cost=None,
                 reference_type="sale",
-                reference_id=sale_id_placeholder,
+                reference_id=sale_id,
                 reason=None,
                 created_by_user_id=user_id,
                 allow_negative=True,
             )
 
-        number = await self._assign_number(store)
         now = datetime.now(timezone.utc)
+        # The moment the sale actually happened. For an online bill that is
+        # now; for an offline one it is when the cashier rang it up, possibly
+        # days ago. It drives the invoice month and is stored for audit.
+        occurred_at = payload.occurred_at or now
+        number = await self._assign_number(store, occurred_at)
 
         sale = Sale(
-            id=sale_id_placeholder,
+            id=sale_id,
             number=number,
             store_id=payload.store_id,
             day_session_id=session.id,
@@ -225,6 +456,8 @@ class SaleService:
             created_by_user_id=user_id,
             salesperson_user_id=payload.salesperson_user_id,
             client_uuid=payload.client_uuid,
+            occurred_at=occurred_at,
+            terminal_uuid=payload.terminal_uuid,
         )
         sale.lines = lines
         sale.payments = [
@@ -232,10 +465,64 @@ class SaleService:
             for p in payload.payments
         ]
         self.db.add(sale)
+        # The flush is what actually tests uq_sales_client_uuid.
         await self.db.flush()
 
+    async def _acknowledge_replay(self, existing: Sale, payload: SaleCreate) -> Sale:
+        """Return an already-stored sale, but only if this really is the same sale.
 
-        return await self.get(sale.id)
+        A client_uuid is an idempotency key, not a licence to overwrite. If the
+        replayed payload describes a DIFFERENT transaction, returning the
+        stored one would silently discard whatever the caller actually sent -
+        so the mismatch is reported instead of being papered over.
+        """
+        stored = await self.get(existing.id)
+        self._assert_same_transaction(stored, payload)
+        return stored
+
+    @staticmethod
+    def _assert_same_transaction(stored: Sale, payload: SaleCreate) -> None:
+        """Reject a replay whose financial content differs from what was stored.
+
+        Only values the payload actually carries are compared, so a legacy
+        online payload (no line_total, no tax_rate) is still recognised as the
+        same sale it created.
+        """
+        stored_lines = sorted(stored.lines, key=lambda line: line.sort_order)
+
+        mismatch: str | None = None
+        if len(stored_lines) != len(payload.lines):
+            mismatch = "line count"
+        else:
+            for stored_line, sent in zip(stored_lines, payload.lines):
+                if stored_line.variant_id != sent.variant_id:
+                    mismatch = "variant"
+                elif _round(stored_line.quantity) != _round(sent.quantity):
+                    mismatch = "quantity"
+                elif sent.line_total is not None and _round(
+                    stored_line.line_total
+                ) != _round(sent.line_total):
+                    mismatch = "line total"
+                elif sent.unit_price is not None and _round(
+                    stored_line.unit_price
+                ) != _round(sent.unit_price):
+                    mismatch = "unit price"
+                elif _round(stored_line.discount_pct) != _round(sent.discount_pct):
+                    mismatch = "discount"
+                if mismatch:
+                    break
+
+        if mismatch is None:
+            sent_paid = _round(sum((p.amount for p in payload.payments), start=_ZERO))
+            if _round(stored.paid_total) != sent_paid:
+                mismatch = "payment total"
+
+        if mismatch is not None:
+            raise ConflictError(
+                "This client_uuid was already used for a different sale.",
+                code="CLIENT_UUID_PAYLOAD_MISMATCH",
+                details={"client_uuid": payload.client_uuid, "differs_on": mismatch},
+            )
 
     # ------------------------------------------------------------------
     # Read / list / void
@@ -462,24 +749,51 @@ class SaleService:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-    async def _assign_number(self, store: Store) -> str:
-        """Bump the per-(store, month) counter and format INV-CODE-YYYYMM-NNNN."""
-        now = datetime.now(timezone.utc)
-        year_month = now.strftime("%Y%m")
+    async def _assign_number(self, store: Store, effective_at: datetime) -> str:
+        """Bump the per-(store, month) counter and format INV-CODE-YYYYMM-NNNN.
+
+        The month comes from WHEN THE SALE HAPPENED, not from when it reached
+        the server. A bill rung up on 31 March and synced on 1 April belongs to
+        the March sequence; giving it an April number would break the
+        chronological invoice ordering GST filing depends on.
+
+        Allocation is serialised with SELECT ... FOR UPDATE. Without it two
+        concurrent sales read the same next_seq and both claim it - one then
+        dies on uq_sales_number, and the bill it belonged to is lost.
+        """
+        year_month = effective_at.strftime("%Y%m")
 
         row = await self.db.scalar(
-            select(SaleNumberSequence).where(
+            select(SaleNumberSequence)
+            .where(
                 SaleNumberSequence.store_id == store.id,
                 SaleNumberSequence.year_month == year_month,
             )
+            .with_for_update()
         )
         if row is None:
-            row = SaleNumberSequence(
-                store_id=store.id, year_month=year_month, next_seq=1
+            # A concurrent caller may create the same (store, month) counter
+            # first. The SAVEPOINT keeps that collision from destroying the
+            # surrounding sale transaction.
+            try:
+                async with self.db.begin_nested():
+                    self.db.add(
+                        SaleNumberSequence(
+                            store_id=store.id, year_month=year_month, next_seq=1
+                        )
+                    )
+            except IntegrityError:
+                pass
+            row = await self.db.scalar(
+                select(SaleNumberSequence)
+                .where(
+                    SaleNumberSequence.store_id == store.id,
+                    SaleNumberSequence.year_month == year_month,
+                )
+                .with_for_update()
             )
-            self.db.add(row)
-            await self.db.flush()
 
         seq = row.next_seq
         row.next_seq = seq + 1
+        await self.db.flush()
         return f"INV-{store.code}-{year_month}-{seq:04d}"
