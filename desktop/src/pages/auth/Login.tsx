@@ -30,6 +30,7 @@ import { Calculator, LogIn, Mail, ShieldCheck } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Wordmark } from '@/components/ui/Logo';
 import { ApiError } from '@/lib/api';
 import { login, login2fa } from '@/lib/auth-api';
 import { generateMathCaptcha, type MathCaptcha, verifyMathCaptcha } from '@/lib/math-captcha';
@@ -263,15 +264,15 @@ export function Login(): JSX.Element {
         transition={{ duration: 0.5, ease: [0.2, 0.7, 0.2, 1] }}
         className="glass-strong relative w-full max-w-md p-10"
       >
-        <div className="mb-8 flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cobalt-500 to-cobalt-800 shadow-glow">
-            <ShieldCheck className="h-5 w-5 text-white" />
-          </span>
-          <div>
-            <div className="text-lg font-semibold tracking-tight text-white">RetailOS</div>
-            <div className="text-xs text-slate-500">
-              {stage === 'twofa' ? 'Two-factor verification' : 'Sign in to continue'}
-            </div>
+        {/*
+          The login screen is the one place with room for the full lockup, and
+          the one moment the brand is actually looked at rather than glanced
+          past. The generic shield tile it replaces said nothing.
+        */}
+        <div className="mb-8">
+          <Wordmark width={200} />
+          <div className="mt-3 text-xs text-slate-500">
+            {stage === 'twofa' ? 'Two-factor verification' : 'Sign in to continue'}
           </div>
         </div>
 
@@ -366,7 +367,7 @@ export function Login(): JSX.Element {
                     })}
                   />
                 </div>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-xs text-slate-500">
                   The problem changes after every wrong answer.
                 </p>
               </div>
@@ -385,8 +386,8 @@ export function Login(): JSX.Element {
                 <span
                   className={
                     rememberSecure
-                      ? 'text-[11px] font-medium text-emerald-300'
-                      : 'text-[11px] font-medium text-amber-300'
+                      ? 'text-xs font-medium text-emerald-300'
+                      : 'text-xs font-medium text-amber-300'
                   }
                   title={
                     rememberSecure

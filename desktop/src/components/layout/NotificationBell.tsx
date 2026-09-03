@@ -90,7 +90,7 @@ export function NotificationBell(): JSX.Element | null {
       >
         <Bell className="h-4 w-4" />
         {unread > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white">
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-xs font-semibold text-onbrand">
             {unread > 99 ? '99+' : unread}
           </span>
         )}
@@ -183,22 +183,22 @@ function BellRow({
         isUnread ? 'bg-white/[0.02] hover:bg-white/[0.05]' : 'hover:bg-white/[0.03]',
       )}
     >
-      <div className={cn('mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border', meta.tone)}>
+      <div className={cn('mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border', meta.tone)}>
         {meta.icon}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           <div className="truncate text-sm font-medium text-white">{notification.title}</div>
           {isUnread && (
-            <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-cobalt-400" />
+            <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-cobalt-400" />
           )}
         </div>
         {notification.body && (
-          <p className="mt-0.5 line-clamp-2 whitespace-pre-line text-xs text-slate-400">
+          <p className="mt-1 line-clamp-2 whitespace-pre-line text-xs text-slate-400">
             {notification.body}
           </p>
         )}
-        <div className="mt-1 flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-500">
+        <div className="mt-1 flex items-center gap-2 text-xs uppercase tracking-wider text-slate-500">
           <span>{KIND_LABEL[notification.kind]}</span>
           <span>·</span>
           <span>{new Date(notification.created_at).toLocaleString()}</span>

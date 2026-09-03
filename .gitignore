@@ -39,4 +39,6 @@ Thumbs.db
 
 # Extracted portable build (not source)
 /RetailOS/
-tsbuildinfo
+
+# TypeScript incremental build cache
+*.tsbuildinfo

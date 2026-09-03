@@ -22,11 +22,21 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   const invalid = Boolean(error);
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1">
+      {/*
+        SENTENCE CASE, not ALL CAPS.
+
+        Uppercase strips the ascender/descender profile the eye uses to
+        recognise a word by shape, so it is measurably slower to read — and a
+        screen full of shouting micro-labels is the single most dated thing in
+        an enterprise UI. The label is also pulled closer to its field
+        (space-y-1, not 2): Gestalt proximity, so a label visibly belongs to
+        the input under it rather than floating between two of them.
+      */}
       {label && (
         <label
           htmlFor={inputId}
-          className="text-xs font-medium uppercase tracking-wider text-slate-400"
+          className="block text-xs font-medium text-slate-400"
         >
           {label}
         </label>
@@ -43,12 +53,15 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           aria-invalid={invalid || undefined}
           aria-describedby={hint || error ? `${inputId}-desc` : undefined}
           className={cn(
-            'w-full rounded-xl border bg-white/[0.02] px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-500',
-            'transition-colors focus:outline-none',
+            // A field needs a real fill. `bg-white/[0.02]` resolved to 2%
+            // near-black on the light theme — no fill at all — so inputs read
+            // as ghost outlines rather than as something you can type into.
+            'w-full rounded-lg border bg-surface-muted px-3 h-11 text-sm text-slate-100',
+            'placeholder:text-slate-500 transition-colors focus:outline-none',
             leadingIcon && 'pl-10',
             invalid
-              ? 'border-rose-500/50 focus:border-rose-400 focus:ring-1 focus:ring-rose-400/40'
-              : 'border-border focus:border-cobalt-400 focus:ring-1 focus:ring-cobalt-400/40',
+              ? 'border-rose-500 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/25'
+              : 'border-border-strong hover:border-slate-400 focus:border-brand-600 focus:ring-2 focus:ring-brand-600/25',
             className,
           )}
           {...rest}

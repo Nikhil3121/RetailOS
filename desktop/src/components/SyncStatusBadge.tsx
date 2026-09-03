@@ -48,7 +48,7 @@ export function SyncStatusBadge({ state }: { state: LocalSyncState }): JSX.Eleme
   return (
     <span
       title={style.hint}
-      className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium ${style.className}`}
+      className={`inline-flex items-center rounded-md border px-2 py-1 text-xs font-medium ${style.className}`}
     >
       {style.label}
     </span>

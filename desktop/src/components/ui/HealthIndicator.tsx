@@ -38,7 +38,7 @@ export function HealthIndicator(): JSX.Element {
   return (
     <Pill tone="success" icon={<CheckCircle2 className="h-3.5 w-3.5" />}>
       <span className="font-medium">Online</span>
-      <span className="ml-2 text-[10px] text-emerald-300/70">v{query.data.version}</span>
+      <span className="ml-2 text-xs text-emerald-300/70">v{query.data.version}</span>
     </Pill>
   );
 }
@@ -55,7 +55,7 @@ function Pill({ children, icon, tone, title }: PillProps): JSX.Element {
     <div
       title={title}
       className={cn(
-        'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs',
+        'flex items-center gap-2 rounded-full border px-3 py-1 text-xs',
         tone === 'success' && 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
         tone === 'danger' && 'border-rose-500/30 bg-rose-500/10 text-rose-200',
         tone === 'muted' && 'border-border bg-white/[0.03] text-slate-400',

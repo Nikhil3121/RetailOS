@@ -47,6 +47,14 @@ export interface Sale {
   customer_id: string | null;
   salesperson_user_id: string | null;
   status: SaleStatus;
+  /**
+   * What kind of document this is. A credit note is the SAME shape with
+   * negative money, so anything that renders an amount must read this first —
+   * otherwise a refund displays as a sale.
+   */
+  doc_type: SaleDocType;
+  /** The invoice a credit note reverses. Always null on a sale. */
+  original_sale_id: string | null;
   subtotal: string;
   discount_total: string;
   tax_total: string;
@@ -146,4 +154,70 @@ export function collectSalePayment(
   body: SalePaymentCollect,
 ): Promise<Sale> {
   return apiRequest({ path: `/sales/${id}/payments`, method: 'POST', body });
+}
+
+/* ---------------------------------------------------------------------------
+ * Returns / credit notes
+ * ------------------------------------------------------------------------ */
+
+/**
+ * A return is stored as a `sales` row with negative amounts, so every existing
+ * report nets it out without change. Presentation is the opposite: a person is
+ * shown a positive figure labelled "Credit note", never "-₹899".
+ */
+export type SaleDocType = 'sale' | 'return';
+
+export interface ReturnableLine {
+  sale_line_id: string;
+  variant_id: string;
+  product_name: string;
+  variant_name: string;
+  sku: string;
+  unit_price: string;
+  sold_quantity: string;
+  returned_quantity: string;
+  /** What is genuinely left to credit — sold minus already returned. */
+  returnable_quantity: string;
+}
+
+export interface SaleReturnLineInput {
+  sale_line_id: string;
+  /** POSITIVE — how many units are coming back. The server stores the negative. */
+  quantity: string;
+}
+
+export interface SaleReturnBody {
+  lines: SaleReturnLineInput[];
+  /** Money going back, as positive amounts. Empty leaves the credit on account. */
+  refunds: SalePaymentInput[];
+  reason: string;
+  notes?: string | null;
+  client_uuid?: string | null;
+  occurred_at?: string | null;
+  terminal_uuid?: string | null;
+  day_session_id?: string | null;
+}
+
+/** What can still be credited against a bill. Drives the return screen. */
+export async function getReturnableLines(saleId: string): Promise<ReturnableLine[]> {
+  return apiRequest({ path: `/sales/${saleId}/returnable`, method: 'GET' });
+}
+
+/** Credit part or all of a bill. Returns the credit note. */
+export async function createSaleReturn(
+  saleId: string,
+  body: SaleReturnBody,
+): Promise<Sale> {
+  return apiRequest({ path: `/sales/${saleId}/returns`, method: 'POST', body });
+}
+
+/**
+ * Absolute value for display.
+ *
+ * Credit notes carry negative money in storage. A cashier should read
+ * "Credit note · ₹899", not "-₹899" — the sign is a database decision, and
+ * `doc_type` already carries the meaning on screen.
+ */
+export function displayAmount(value: string | number): number {
+  return Math.abs(Number(value) || 0);
 }

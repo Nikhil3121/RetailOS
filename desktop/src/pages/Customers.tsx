@@ -91,11 +91,11 @@ export function Customers(): JSX.Element {
         header: 'Status',
         cell: (c) =>
           c.is_active ? (
-            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-200">
+            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-200">
               Active
             </span>
           ) : (
-            <span className="rounded-full border border-border bg-white/[0.02] px-2 py-0.5 text-xs text-slate-400">
+            <span className="rounded-full border border-border bg-white/[0.02] px-2 py-1 text-xs text-slate-400">
               Inactive
             </span>
           ),
@@ -137,7 +137,7 @@ export function Customers(): JSX.Element {
         }
       />
 
-      <div className="glass flex items-end gap-3 p-4">
+      <div className="glass inline-flex w-fit max-w-full flex-wrap items-end gap-3 px-3 py-2">
         <div className="flex-1">
           <Input
             placeholder="Search by name, phone, or email"

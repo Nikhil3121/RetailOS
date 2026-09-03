@@ -59,7 +59,7 @@ export function ForgotPassword(): JSX.Element {
         {sent ? (
           <div className="space-y-4">
             <div className="flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+              <CheckCircle2 className="mt-1 h-4 w-4 shrink-0" />
               <span>{sent.message}</span>
             </div>
             {sent.debugToken && (

@@ -11,8 +11,60 @@
  * ------------------------------------------------------------------------- */
 
 @layer base {
+  /* ---------------------------------------------------------------------
+   * Theme tokens
+   *
+   * LIGHT IS THE COUNTER DEFAULT. A shop floor is bright: dark surfaces
+   * catch glare and translucency lowers contrast exactly where money is
+   * displayed. Dark remains available for evening use via
+   * <html data-theme="dark">, and is a re-grounding rather than an
+   * inversion — the same navy family, held at readable contrast on a dark
+   * ground.
+   *
+   * Values are bare "R G B" triplets so Tailwind can apply its own alpha.
+   * ------------------------------------------------------------------- */
   :root {
+    color-scheme: light;
+
+    --app-bg:      233 237 241;  /* the room — deepened so cards separate by
+                                    surface contrast, not only by outline */
+    --panel:       255 255 255;  /* cards */
+    --panel-2:     246 248 250;  /* inset rows, table headers */
+
+    --ink:          16  21  26;  /* primary  18.4:1 on panel */
+    --ink-2:        74  85  97;  /* secondary 7.6:1 */
+    --ink-3:       104 115 127;  /* tertiary  4.8:1 — WAS 120/131/143 at
+                                    3.86:1, which FAILED WCAG AA. It maps to
+                                    `text-slate-500`, the most-used text colour
+                                    in the app (250 usages), so the single most
+                                    common text on screen was unreadable in the
+                                    theme a shop runs under tubelights. */
+
+    --line:        190 198 206;  /* hairlines — 1.8:1, a real edge */
+    --line-strong: 150 158 166;  /* component boundaries — 2.7:1 */
+
+    --brand:       178  79  13;  /* #b24f0d — carries white text at 5.23:1 */
+    --brand-soft:  253 231 216;  /* #fde7d8 */
+  }
+
+  :root[data-theme='dark'] {
     color-scheme: dark;
+
+    /* Navy, not neutral slate — the same blue the logo is built from, so the
+       chrome and the mark finally belong to one brand. */
+    --app-bg:        8  12  20;  /* #080c14 */
+    --panel:        11  17  27;  /* #0b111b */
+    --panel-2:      17  24  36;  /* #111824 */
+
+    --ink:         237 241 248;  /* 16.7:1 on the panel */
+    --ink-2:       169 182 204;  /*  9.2:1 */
+    --ink-3:       126 140 166;  /*  5.6:1 */
+
+    --line:         37  46  65;  /* #252e41 — a real edge, navy-tinted */
+    --line-strong:  58  70  95;  /* #3a465f — component boundaries */
+
+    --brand:       243 135  63;  /* #f3873f — 7.52:1 on the navy panel */
+    --brand-soft:  118  54  12;  /* #76360c */
   }
 
   /* Force OS-drawn form widgets (select popup, native date-picker calendar,
@@ -26,7 +78,7 @@
   input[type='month'],
   input[type='week'],
   input[type='color'] {
-    color-scheme: dark;
+    color-scheme: inherit;
   }
 
   html,
@@ -35,13 +87,20 @@
     height: 100%;
   }
 
+  /* One rule gives every interactive element a visible keyboard state. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--brand));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
   body {
-    @apply bg-ink-950 text-slate-200 font-sans;
-    background-image:
-      radial-gradient(1200px 600px at 10% -10%, rgba(31, 71, 240, 0.35), transparent 60%),
-      radial-gradient(900px 500px at 100% 0%, rgba(6, 182, 212, 0.18), transparent 60%),
-      radial-gradient(700px 500px at 50% 120%, rgba(31, 71, 240, 0.18), transparent 60%);
-    background-attachment: fixed;
+    @apply text-slate-200 font-sans;
+    background-color: rgb(var(--app-bg));
+    /* The aurora gradients and grid overlay are gone on purpose: decorative
+       colour behind a screen whose job is displaying money competes with the
+       content for attention, and it was one of two accent families fighting
+       each other. */
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -64,18 +123,130 @@
 
   /* Selection */
   ::selection {
-    background: rgba(31, 71, 240, 0.45);
-    color: #eaf2ff;
+    background: rgb(var(--brand) / 0.28);
+    color: rgb(var(--ink));
   }
 }
 
 @layer components {
+  /* A panel is an opaque surface with a visible edge.
+   *
+   * Translucency and heavy blur were lowering contrast on the one screen that
+   * displays money, and the 6%-white border meant a card had no discernible
+   * edge at all. Solid fill, a real 1px line, and a modest radius: the panel
+   * now reads as a container in both themes. */
+  /* A card has to read as ONE REGION, or the eye cannot tell what belongs to
+     what. A hairline alone does not achieve that — Gestalt's "common region"
+     needs an enclosed surface. Three cues do it together: the panel is lighter
+     than the room, a real edge bounds it, and a soft shadow lifts it.
+
+     Light and dark need different physics. On a light ground a shadow reads as
+     depth; on a dark ground it disappears, so the lift comes from a 1px
+     highlight along the top edge instead — the same trick a physical bevel
+     uses under an overhead light. */
   .glass {
-    @apply bg-surface backdrop-blur-xl border border-border shadow-glass rounded-2xl;
+    background-color: rgb(var(--panel));
+    @apply border border-border rounded-xl;
+    box-shadow:
+      0 1px 2px rgb(15 23 32 / 0.05),
+      0 6px 16px -10px rgb(15 23 32 / 0.14);
   }
   .glass-strong {
-    @apply bg-surface-strong backdrop-blur-2xl border border-border-strong shadow-glass-lg rounded-2xl;
+    background-color: rgb(var(--panel));
+    @apply border border-border-strong rounded-xl;
+    box-shadow:
+      0 1px 2px rgb(15 23 32 / 0.06),
+      0 18px 40px -22px rgb(15 23 32 / 0.30);
   }
+  [data-theme='dark'] .glass {
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.05),
+      0 6px 18px -12px rgb(0 0 0 / 0.65);
+  }
+  [data-theme='dark'] .glass-strong {
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.07),
+      0 20px 44px -24px rgb(0 0 0 / 0.80);
+  }
+
+  /* Every column of money uses this. Proportional digits are different widths,
+     so decimals never line up and figures visibly shift as a cart changes. */
+  .money {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  /* Keyboard focus, visible everywhere.
+   *
+   * The POS was built around F-keys and Enter-to-scan, yet focus-visible
+   * appeared in one file — so tabbing through billing showed nothing. */
+  .focus-ring {
+    @apply outline-none ring-2 ring-cobalt-400/60 ring-offset-2;
+    --tw-ring-offset-color: rgb(var(--app-bg));
+  }
+
+  /* -------------------------------------------------------------------------
+   * THE INVOICE SHEET IS PAPER. It does not follow the app theme.
+   *
+   * A tax invoice is a print preview. What the shopkeeper sees on screen has
+   * to be what leaves the printer — black ink on white stock — so this surface
+   * deliberately opts OUT of light/dark and stays paper in both.
+   *
+   * It was doing the opposite. The sheet carried `bg-white text-slate-900`,
+   * and both of those tokens are remapped to `rgb(var(--ink))` at the top of
+   * this file. So the background took the app's INK colour (near-black under
+   * the light theme, near-white under dark — hence a bill that inverted
+   * whenever the theme was switched) and the text resolved to that exact same
+   * value. Foreground and background were literally one colour, which is why
+   * every figure on the bill — qty, price, GST, subtotal, CGST, SGST, total
+   * paid — rendered invisible rather than missing.
+   *
+   * The fix is to redefine the token VARIABLES inside this scope. Every
+   * Tailwind utility used within the sheet reads from them, so the whole
+   * document becomes paper-correct without rewriting class names.
+   *
+   * Doubled class = specificity 0,2,0, so it beats `.glass` (0,1,0) on the
+   * offline bill, which renders inside a GlassCard.
+   * ---------------------------------------------------------------------- */
+  .invoice-sheet.invoice-sheet {
+    --panel:       255 255 255;
+    --panel-2:     248 249 250;
+    --ink:          17  20  24;  /* body copy — near-black, not pure */
+    --ink-2:        71  79  88;  /* secondary */
+    --ink-3:       109 118 128;  /* labels, captions */
+    --line:        219 224 229;  /* hairlines */
+    --line-strong: 172 180 188;  /* the rule under the totals */
+
+    background-color: #ffffff;
+    color: rgb(var(--ink));
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 24px 60px -28px rgb(0 0 0 / 0.45);
+  }
+
+  /* Accents picked for a dark ground are too pale to read on white. These are
+     the same hues at paper weight. */
+  .invoice-sheet .text-amber-300,
+  .invoice-sheet .text-amber-200 { color: #92400e; }
+  .invoice-sheet .text-emerald-300,
+  .invoice-sheet .text-emerald-200 { color: #065f46; }
+  .invoice-sheet .text-rose-300,
+  .invoice-sheet .text-rose-200 { color: #9f1239; }
+  .invoice-sheet .text-slate-600 { color: rgb(var(--ink-3)); }
+
+  /* -------------------------------------------------------------------------
+   * Brand marks, one per ground.
+   *
+   * The logo's "J" and its whole "RETAIL" wordmark are near-black navy. On the
+   * dark panel that is roughly 1.3:1 contrast — the wordmark simply is not
+   * there. So a light-ink variant exists and the two are swapped in CSS rather
+   * than in React: no theme subscription, no flash of the wrong mark on first
+   * paint, and it stays correct if the attribute is set before hydration.
+   *
+   * The app stamps data-theme="dark" or nothing at all, so a plain attribute
+   * selector is sufficient here — no prefers-color-scheme branch needed.
+   * ---------------------------------------------------------------------- */
+  .brand-on-dark { display: none; }
+  [data-theme='dark'] .brand-on-light { display: none; }
+  [data-theme='dark'] .brand-on-dark { display: inline-block; }
 
   /* Draggable region for the frameless window title bar. */
   .titlebar-drag {
@@ -94,194 +265,62 @@
 }
 
 /* ---------------------------------------------------------------------------
- * Light-mode preview
+ * Light mode used to live here as ~60 `!important` overrides that re-stated
+ * every surface and text colour under `html[data-theme="light"]`.
  *
- * The app is dark-first. Rather than rewriting every component to expose a
- * light variant, we override the handful of surfaces + colour utilities that
- * carry the dark palette. Toggling `data-theme="light"` on <html> (via the
- * titlebar switch in ThemeToggle.tsx) activates all of the below.
- *
- * Kept intentionally scoped and additive so dark mode is bit-for-bit unchanged.
+ * They are gone. Both themes are now defined once, at the top of this file, as
+ * token values that Tailwind's own colour scale reads from — so a component
+ * written against `text-slate-400` or `bg-ink-900` is already correct in both
+ * themes without a single override.
  * ------------------------------------------------------------------------- */
-html[data-theme='light'] {
-  color-scheme: light;
-}
-html[data-theme='light'] body {
-  background-color: #f4f6fb;
-  color: #101425;
-  background-image:
-    radial-gradient(1200px 600px at 10% -10%, rgba(31, 71, 240, 0.10), transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, rgba(6, 182, 212, 0.06), transparent 60%),
-    radial-gradient(700px 500px at 50% 120%, rgba(31, 71, 240, 0.08), transparent 60%);
-}
 
-/* Reveal OS-drawn form widgets in their light variant. */
-html[data-theme='light'] select,
-html[data-theme='light'] input[type='date'],
-html[data-theme='light'] input[type='time'],
-html[data-theme='light'] input[type='datetime-local'],
-html[data-theme='light'] input[type='month'],
-html[data-theme='light'] input[type='week'],
-html[data-theme='light'] input[type='color'] {
-  color-scheme: light;
-}
+/* ---------------------------------------------------------------------------
+ * PRINT.
+ *
+ * This lived as an inline <style> inside Invoice.tsx, so the offline bill
+ * (LocalInvoice) — the one that gets printed during an outage, when printing
+ * matters most — had no print rules at all and would have carried the sidebar,
+ * title bar and app background onto the paper.
+ *
+ * Defined once here, both bills print the same.
+ * ------------------------------------------------------------------------- */
+@media print {
+  /* Force paper regardless of the theme the shop happens to be running. */
+  html,
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
 
-/* Sidebar + titlebar surfaces + any bg-ink-* / bg-surface* backgrounds. */
-html[data-theme='light'] [class*='bg-ink-950'] { background-color: #f4f6fb !important; }
-html[data-theme='light'] [class*='bg-ink-900'] { background-color: rgba(255, 255, 255, 0.78) !important; }
-html[data-theme='light'] [class*='bg-ink-800'] { background-color: rgba(255, 255, 255, 0.90) !important; }
-html[data-theme='light'] [class*='bg-ink-700'] { background-color: rgba(240, 243, 250, 0.90) !important; }
-html[data-theme='light'] [class*='bg-ink-600'] { background-color: rgba(228, 233, 245, 0.90) !important; }
-html[data-theme='light'] [class*='bg-surface'] { background-color: rgba(255, 255, 255, 0.85) !important; }
+  /* App chrome is not part of the document. */
+  .no-print,
+  header.titlebar-drag,
+  aside,
+  .grid-overlay {
+    display: none !important;
+  }
 
-/* Text — flip every slate grey to a dark equivalent in light mode.
-   `text-white` is deliberately NOT included — it stays white on coloured
-   buttons (primary cobalt gradient, danger red). Buttons that used near-white
-   text on transparent surfaces (secondary / ghost variants) are handled
-   explicitly further down. */
-html[data-theme='light'] [class*='text-slate-50'],
-html[data-theme='light'] [class*='text-slate-100'],
-html[data-theme='light'] [class*='text-slate-200'],
-html[data-theme='light'] [class*='text-slate-300'],
-html[data-theme='light'] [class*='text-slate-400'] {
-  color: #101425 !important;   /* ink-950 — near-black */
-}
-html[data-theme='light'] [class*='text-slate-500'] {
-  color: #3b4257 !important;   /* darker slate for medium-emphasis text */
-}
-html[data-theme='light'] [class*='text-slate-600'],
-html[data-theme='light'] [class*='text-slate-700'],
-html[data-theme='light'] [class*='text-slate-800'] {
-  color: #4d556d !important;   /* softer slate for low-emphasis captions */
-}
+  main {
+    overflow: visible !important;
+  }
 
-/* Input placeholders — Tailwind uses `placeholder:text-slate-*`, which the
-   attribute-selector above won't catch. Force placeholders to a visible grey. */
-html[data-theme='light'] input::placeholder,
-html[data-theme='light'] textarea::placeholder {
-  color: rgba(16, 20, 37, 0.45) !important;
-}
+  .invoice-sheet.invoice-sheet {
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+  }
 
-/* Native input backgrounds + text — Tailwind form inputs use `bg-ink-*` or
-   `bg-white/[0.04]`, both covered above; but the caret + selection colours
-   need the light palette explicitly. */
-html[data-theme='light'] input,
-html[data-theme='light'] textarea,
-html[data-theme='light'] select {
-  color: #101425;
-  caret-color: #101425;
-}
+  /* Keep a bill from splitting a line item across two sheets. */
+  .invoice-sheet tr,
+  .invoice-sheet thead {
+    break-inside: avoid;
+  }
 
-/* KBD chips inside empty-state hints (Held Bills panel, tooltips). Their
-   background was a translucent white — invisible on light backgrounds. */
-html[data-theme='light'] kbd {
-  background-color: rgba(16, 20, 37, 0.08) !important;
-  color: #101425 !important;
-  border: 1px solid rgba(16, 20, 37, 0.14);
-}
-
-/* Disabled controls should be visibly muted, not invisible. */
-html[data-theme='light'] :disabled {
-  color: #7a819a !important;
-}
-
-/* Chart axis labels + gridlines — the dashboard uses default light-mode
-   colours from the chart library, but its wrapper text (title / hint) uses
-   text-slate-* which the block above already handles. This is just for
-   safety on SVG <text> tags rendered directly. */
-html[data-theme='light'] svg text {
-  fill: currentColor;
-}
-
-/* White text inside a glass card (KPI numbers, invoice hero) is invisible
-   on a white light-mode surface. Global `text-white` stays untouched (needed
-   for coloured buttons + colored badges); this scoped override only fires
-   when the text sits inside a translucent glass container. */
-html[data-theme='light'] .glass [class*='text-white'],
-html[data-theme='light'] .glass-strong [class*='text-white'] {
-  color: #101425 !important;
-}
-
-/* Pale accent-colour text (Online chip, session banner, delta chips, held-bills
-   pill) was designed for a dark background. On white they become invisible.
-   Bump them all to a darker shade that still reads as "green / amber / red". */
-html[data-theme='light'] [class*='text-emerald-100'],
-html[data-theme='light'] [class*='text-emerald-200'],
-html[data-theme='light'] [class*='text-emerald-300'] {
-  color: #047857 !important;   /* emerald-700 */
-}
-html[data-theme='light'] [class*='text-amber-100'],
-html[data-theme='light'] [class*='text-amber-200'],
-html[data-theme='light'] [class*='text-amber-300'] {
-  color: #b45309 !important;   /* amber-700 */
-}
-html[data-theme='light'] [class*='text-rose-100'],
-html[data-theme='light'] [class*='text-rose-200'],
-html[data-theme='light'] [class*='text-rose-300'] {
-  color: #be123c !important;   /* rose-700 */
-}
-html[data-theme='light'] [class*='text-cobalt-100'],
-html[data-theme='light'] [class*='text-cobalt-200'],
-html[data-theme='light'] [class*='text-cobalt-300'] {
-  color: #1637c4 !important;   /* cobalt-600 */
-}
-html[data-theme='light'] [class*='text-aurora-300'],
-html[data-theme='light'] [class*='text-aurora-400'] {
-  color: #0891b2 !important;   /* aurora-600 */
-}
-
-/* Secondary + ghost buttons — these lean on tiny white-alpha backgrounds
-   (`bg-white/[0.04]`) that vanish on a light page. Flip to dark-alpha so
-   the button itself is visible, and give the label solid contrast. */
-html[data-theme='light'] button[data-variant='secondary'] {
-  background-color: rgba(16, 20, 37, 0.05) !important;
-  color: #101425 !important;
-  border-color: rgba(16, 20, 37, 0.14) !important;
-}
-html[data-theme='light'] button[data-variant='secondary']:hover:not(:disabled) {
-  background-color: rgba(16, 20, 37, 0.10) !important;
-  border-color: rgba(16, 20, 37, 0.22) !important;
-}
-html[data-theme='light'] button[data-variant='ghost'] {
-  color: #48506a !important;
-}
-html[data-theme='light'] button[data-variant='ghost']:hover:not(:disabled) {
-  background-color: rgba(16, 20, 37, 0.06) !important;
-  color: #101425 !important;
-}
-
-/* Borders — the app uses rgba(255,255,255,alpha); invert to dark alphas. */
-html[data-theme='light'] [class*='border-border'] {
-  border-color: rgba(16, 20, 37, 0.14) !important;
-}
-html[data-theme='light'] [class*='border-border-strong'] {
-  border-color: rgba(16, 20, 37, 0.22) !important;
-}
-html[data-theme='light'] [class*='divide-border'] > * + * {
-  border-color: rgba(16, 20, 37, 0.10) !important;
-}
-
-/* Glass surfaces should read as soft white cards, not translucent dark. */
-html[data-theme='light'] .glass,
-html[data-theme='light'] .glass-strong {
-  background-color: rgba(255, 255, 255, 0.85);
-  border-color: rgba(16, 20, 37, 0.08);
-  box-shadow:
-    0 1px 0 0 rgba(255, 255, 255, 0.9) inset,
-    0 8px 32px -8px rgba(16, 20, 37, 0.12),
-    0 0 0 1px rgba(16, 20, 37, 0.05);
-}
-
-/* Scrollbar */
-html[data-theme='light'] ::-webkit-scrollbar-thumb {
-  background: rgba(16, 20, 37, 0.14);
-}
-html[data-theme='light'] ::-webkit-scrollbar-thumb:hover {
-  background: rgba(16, 20, 37, 0.24);
-}
-
-/* Selection stays cobalt but on a lighter tint. */
-html[data-theme='light'] ::selection {
-  background: rgba(31, 71, 240, 0.20);
-  color: #060f38;
+  @page {
+    margin: 12mm;
+  }
 }

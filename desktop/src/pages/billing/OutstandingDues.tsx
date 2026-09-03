@@ -89,7 +89,7 @@ export function OutstandingDues(): JSX.Element {
         cell: (r) => (
           <div>
             <div className="font-mono text-sm text-white">{r.number}</div>
-            <div className="text-[11px] text-slate-500">
+            <div className="text-xs text-slate-500">
               {new Date(r.created_at).toLocaleString()}
             </div>
           </div>
@@ -256,7 +256,7 @@ function SummaryTile({
     <GlassCard className="p-4">
       <div className="flex items-start justify-between">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
             {label}
           </div>
           <div
@@ -366,11 +366,11 @@ function CollectPaymentModal({
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
       />
-      <div className="mt-2 flex flex-wrap gap-1.5">
+      <div className="mt-2 flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() => setAmount(sale.balance_due)}
-          className="rounded-md border border-cobalt-500/30 bg-cobalt-500/10 px-2.5 py-1 text-xs font-medium text-cobalt-200 hover:bg-cobalt-500/20"
+          className="rounded-md border border-cobalt-500/30 bg-cobalt-500/10 px-3 py-1 text-xs font-medium text-cobalt-200 hover:bg-cobalt-500/20"
         >
           Full ₹{sale.balance_due}
         </button>
@@ -379,7 +379,7 @@ function CollectPaymentModal({
             key={v}
             type="button"
             onClick={() => setAmount(v.toFixed(2))}
-            className="rounded-md border border-border bg-white/[0.02] px-2.5 py-1 text-xs font-medium text-slate-300 hover:bg-white/[0.05]"
+            className="rounded-md border border-border bg-white/[0.02] px-3 py-1 text-xs font-medium text-slate-300 hover:bg-white/[0.05]"
           >
             ₹{v}
           </button>

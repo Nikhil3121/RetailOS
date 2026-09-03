@@ -82,7 +82,7 @@ export function Donut({
             <div className="font-mono text-lg font-semibold text-white">{centerValue}</div>
           )}
           {centerLabel && (
-            <div className="text-[10px] uppercase tracking-wider text-slate-500">
+            <div className="text-xs uppercase tracking-wider text-slate-500">
               {centerLabel}
             </div>
           )}

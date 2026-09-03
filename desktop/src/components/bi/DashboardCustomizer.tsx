@@ -93,14 +93,14 @@ export function DashboardCustomizer({ open, onClose, sections }: Props): JSX.Ele
       description="Hide sections you don't need and drag the ones you do to the top of the list."
       size="lg"
     >
-      <ul className="space-y-1.5">
+      <ul className="space-y-2">
         {rows.map((s, idx) => {
           const isHidden = hidden.has(s.id);
           return (
             <li
               key={s.id}
               className={cn(
-                'flex items-center gap-3 rounded-xl border px-3 py-2.5',
+                'flex items-center gap-3 rounded-xl border px-3 py-3',
                 isHidden
                   ? 'border-border bg-white/[0.01] opacity-60'
                   : 'border-border-strong bg-white/[0.03]',
@@ -125,7 +125,7 @@ export function DashboardCustomizer({ open, onClose, sections }: Props): JSX.Ele
                   type="button"
                   disabled={idx === 0}
                   onClick={() => move(s.id, -1)}
-                  className="rounded-md border border-border bg-white/[0.02] p-1.5 text-slate-400 hover:bg-white/[0.05] disabled:opacity-40"
+                  className="rounded-md border border-border bg-white/[0.02] p-2 text-slate-400 hover:bg-white/[0.05] disabled:opacity-40"
                   aria-label="Move up"
                 >
                   <ArrowUp className="h-3.5 w-3.5" />
@@ -134,7 +134,7 @@ export function DashboardCustomizer({ open, onClose, sections }: Props): JSX.Ele
                   type="button"
                   disabled={idx === rows.length - 1}
                   onClick={() => move(s.id, 1)}
-                  className="rounded-md border border-border bg-white/[0.02] p-1.5 text-slate-400 hover:bg-white/[0.05] disabled:opacity-40"
+                  className="rounded-md border border-border bg-white/[0.02] p-2 text-slate-400 hover:bg-white/[0.05] disabled:opacity-40"
                   aria-label="Move down"
                 >
                   <ArrowDown className="h-3.5 w-3.5" />

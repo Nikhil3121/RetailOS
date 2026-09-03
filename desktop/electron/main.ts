@@ -117,6 +117,9 @@ async function createMainWindow(): Promise<void> {
     minWidth: 1100,
     minHeight: 720,
     backgroundColor: '#05070d',
+    // Taskbar and Alt-Tab icon in DEV. Packaged builds take theirs from
+    // electron-builder's `win.icon`, which points at the same file.
+    icon: path.join(__dirname, '..', 'build', 'icon.ico'),
     show: false,
     autoHideMenuBar: true,
     titleBarStyle: 'hiddenInset',

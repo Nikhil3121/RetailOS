@@ -153,7 +153,7 @@ function ClosedSessionCard({ session }: { session: DaySessionType }): JSX.Elemen
             <DoorClosed className="h-5 w-5 text-slate-400" />
             Last session — closed
             {session.restated_at && (
-              <span className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300">
+              <span className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-300">
                 Restated
               </span>
             )}
@@ -392,7 +392,7 @@ function CloseSessionCard({
 function Stat({ label, value }: { label: string; value: string }): JSX.Element {
   return (
     <div className="rounded-xl border border-border bg-white/[0.02] px-3 py-3">
-      <div className="text-[10px] uppercase tracking-wider text-slate-500">{label}</div>
+      <div className="text-xs uppercase tracking-wider text-slate-500">{label}</div>
       <div className="mt-1 font-mono text-lg text-white">{value}</div>
     </div>
   );
@@ -400,7 +400,7 @@ function Stat({ label, value }: { label: string; value: string }): JSX.Element {
 
 function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }): JSX.Element {
   return (
-    <div className="flex items-center justify-between py-0.5">
+    <div className="flex items-center justify-between py-1">
       <span className={strong ? 'text-slate-200' : 'text-slate-500'}>{label}</span>
       <span className={`font-mono ${strong ? 'text-slate-100' : 'text-slate-300'}`}>{value}</span>
     </div>

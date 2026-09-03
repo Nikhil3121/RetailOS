@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Printer } from 'lucide-react';
+import { ArrowLeft, Printer, RotateCcw } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { getSale, PAYMENT_LABEL } from '@/lib/sales-api';
@@ -43,12 +43,17 @@ export function Invoice(): JSX.Element {
     ? staffQuery.data?.items.find((u) => u.id === sale.salesperson_user_id)
     : undefined;
 
+  const isReturn = sale?.doc_type === 'return';
+  /** Credit notes store negative money; a person is shown the positive figure. */
+  const show = (v: string | number | null | undefined): string =>
+    Math.abs(Number(v ?? 0)).toFixed(2);
+
   const isIgst = Boolean(
     store && customer && customer.state && store.state && customer.state.trim().toLowerCase() !== store.state.trim().toLowerCase(),
   );
-  const cgstAmount = isIgst ? 0 : (Number(sale?.tax_total ?? '0') / 2);
+  const cgstAmount = isIgst ? 0 : Math.abs(Number(sale?.tax_total ?? '0')) / 2;
   const sgstAmount = cgstAmount;
-  const igstAmount = isIgst ? Number(sale?.tax_total ?? '0') : 0;
+  const igstAmount = isIgst ? Math.abs(Number(sale?.tax_total ?? '0')) : 0;
 
   // Auto-focus so Ctrl+P works right away.
   useEffect(() => {
@@ -59,8 +64,19 @@ export function Invoice(): JSX.Element {
     <div className="space-y-6">
       <div className="no-print">
         <div className="flex items-center justify-between">
-          <Button variant="ghost" leadingIcon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate('/pos')}>
-            Back to POS
+          {/*
+            The counter's actual next step.
+
+            Printing a bill ends that sale — what follows is the next customer,
+            not a return to wherever the operator came from. `/billing` mounts
+            a fresh cart, so this reads as what it does.
+          */}
+          <Button
+            variant="ghost"
+            leadingIcon={<ArrowLeft className="h-4 w-4" />}
+            onClick={() => navigate('/billing')}
+          >
+            Back to bill
           </Button>
           <div className="flex items-center gap-2">
             {sale && Number(sale.balance_due) > 0 && (
@@ -68,7 +84,16 @@ export function Invoice(): JSX.Element {
                 variant="secondary"
                 onClick={() => navigate('/billing/outstanding')}
               >
-                Collect balance · ₹{sale.balance_due}
+                Collect balance · ₹{show(sale.balance_due)}
+              </Button>
+            )}
+            {sale && !isReturn && sale.status === 'completed' && (
+              <Button
+                variant="secondary"
+                leadingIcon={<RotateCcw className="h-4 w-4" />}
+                onClick={() => navigate(`/sales/${sale.id}/return`)}
+              >
+                Return items
               </Button>
             )}
             <Button leadingIcon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>
@@ -87,9 +112,14 @@ export function Invoice(): JSX.Element {
         </div>
       )}
 
+      {/*
+        No `bg-white` / `text-slate-900` on the sheet any more — both remap to
+        the app's ink token, which made it paint its text in its own background
+        colour. The paper palette lives in `.invoice-sheet`.
+      */}
       {sale && (
-        <div className="invoice-sheet mx-auto max-w-2xl rounded-2xl border border-border bg-white p-8 text-slate-900 shadow-glass-lg">
-          <header className="flex items-start justify-between border-b border-slate-200 pb-6">
+        <div className="invoice-sheet mx-auto max-w-2xl rounded-2xl border border-border p-8">
+          <header className="flex items-start justify-between border-b border-border pb-6">
             <div>
               <div className="text-xl font-semibold">{store?.name ?? '—'}</div>
               <div className="text-xs text-slate-500">
@@ -106,7 +136,9 @@ export function Invoice(): JSX.Element {
               )}
             </div>
             <div className="text-right">
-              <div className="text-xs uppercase tracking-wider text-slate-500">Tax Invoice</div>
+              <div className="text-xs uppercase tracking-wider text-slate-500">
+              {isReturn ? 'Credit Note' : 'Tax Invoice'}
+            </div>
               <div className="mt-1 font-mono text-sm">{sale.number}</div>
               {sale.completed_at && (
                 <div className="mt-1 text-xs text-slate-500">
@@ -157,7 +189,7 @@ export function Invoice(): JSX.Element {
           {/* Lines */}
           <table className="mt-6 w-full text-xs">
             <thead>
-              <tr className="border-y border-slate-300 text-left uppercase tracking-wider text-slate-500">
+              <tr className="border-y border-border-strong text-left uppercase tracking-wider text-slate-500">
                 <th className="py-2">#</th>
                 <th>Item</th>
                 <th className="text-right">Qty</th>
@@ -168,22 +200,22 @@ export function Invoice(): JSX.Element {
             </thead>
             <tbody>
               {sale.lines.map((l, idx) => (
-                <tr key={l.id} className="border-b border-slate-200 align-top">
+                <tr key={l.id} className="border-b border-border align-top">
                   <td className="py-2 text-slate-500">{idx + 1}</td>
                   <td className="py-2">
                     <div className="font-medium">{l.product_name}</div>
-                    <div className="text-[10px] text-slate-500">
+                    <div className="text-xs text-slate-500">
                       {l.variant_name} · <span className="font-mono">{l.sku}</span>
                       {l.hsn_code && <> · HSN {l.hsn_code}</>}
                     </div>
                     {Number(l.discount_pct) > 0 && (
-                      <div className="text-[10px] text-slate-500">Disc {l.discount_pct}%</div>
+                      <div className="text-xs text-slate-500">Disc {l.discount_pct}%</div>
                     )}
                   </td>
-                  <td className="py-2 text-right font-mono">{l.quantity}</td>
-                  <td className="py-2 text-right font-mono">₹{l.unit_price}</td>
+                  <td className="py-2 text-right font-mono">{show(l.quantity)}</td>
+                  <td className="py-2 text-right font-mono">₹{show(l.unit_price)}</td>
                   <td className="py-2 text-right font-mono">{l.tax_rate}%</td>
-                  <td className="py-2 text-right font-mono">₹{l.line_total}</td>
+                  <td className="py-2 text-right font-mono">₹{show(l.line_total)}</td>
                 </tr>
               ))}
             </tbody>
@@ -200,9 +232,9 @@ export function Invoice(): JSX.Element {
               )}
             </div>
             <dl className="space-y-1">
-              <Row label="Subtotal" value={`₹${sale.subtotal}`} />
-              {Number(sale.discount_total) > 0 && (
-                <Row label="Discount" value={`− ₹${sale.discount_total}`} />
+              <Row label="Subtotal" value={`₹${show(sale.subtotal)}`} />
+              {Math.abs(Number(sale.discount_total)) > 0 && (
+                <Row label="Discount" value={`− ₹${show(sale.discount_total)}`} />
               )}
               {isIgst ? (
                 <Row label="IGST" value={`₹${igstAmount.toFixed(2)}`} />
@@ -212,21 +244,21 @@ export function Invoice(): JSX.Element {
                   <Row label="SGST" value={`₹${sgstAmount.toFixed(2)}`} />
                 </>
               )}
-              <div className="my-2 border-t border-slate-300" />
+              <div className="my-2 border-t border-border-strong" />
               <div className="flex items-baseline justify-between">
                 <dt className="text-sm font-medium">Grand total</dt>
-                <dd className="font-mono text-lg font-semibold">₹{sale.grand_total}</dd>
+                <dd className="font-mono text-lg font-semibold">₹{show(sale.grand_total)}</dd>
               </div>
             </dl>
           </section>
 
           {/* Payments */}
-          <section className="mt-6 border-t border-slate-200 pt-4 text-xs">
+          <section className="mt-6 border-t border-border pt-4 text-xs">
             <div className="uppercase tracking-wider text-slate-500">Payments</div>
             {sale.payments.length > 0 ? (
               <ul className="mt-1">
                 {sale.payments.map((p) => (
-                  <li key={p.id} className="flex items-center justify-between py-0.5">
+                  <li key={p.id} className="flex items-center justify-between py-1">
                     <span>
                       {PAYMENT_LABEL[p.method]}
                       {p.reference && <span className="ml-2 text-slate-500">{p.reference}</span>}
@@ -239,9 +271,9 @@ export function Invoice(): JSX.Element {
               <div className="mt-1 italic text-slate-500">Bill saved on credit — no payment yet.</div>
             )}
 
-            <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-1">
+            <div className="mt-2 flex items-center justify-between border-t border-border pt-1">
               <span className="text-slate-500">Total paid</span>
-              <span className="font-mono">₹{sale.paid_total}</span>
+              <span className="font-mono">₹{show(sale.paid_total)}</span>
             </div>
             {Number(sale.change_due) > 0 && (
               <div className="mt-1 flex items-center justify-between font-medium">
@@ -252,31 +284,19 @@ export function Invoice(): JSX.Element {
             {Number(sale.balance_due) > 0 && (
               <div className="mt-2 flex items-center justify-between rounded-md border border-amber-400 bg-amber-50 px-2 py-1 font-semibold text-amber-800">
                 <span>Balance due</span>
-                <span className="font-mono">₹{sale.balance_due}</span>
+                <span className="font-mono">₹{show(sale.balance_due)}</span>
               </div>
             )}
           </section>
 
-          <footer className="mt-8 border-t border-slate-200 pt-4 text-center text-[10px] text-slate-500">
+          <footer className="mt-8 border-t border-border pt-4 text-center text-xs text-slate-500">
             Thank you for shopping with us.
           </footer>
         </div>
       )}
 
-      {/* Print stylesheet */}
-      <style>{`
-        @media print {
-          body { background: white !important; }
-          .no-print, header.titlebar-drag, aside, .grid-overlay { display: none !important; }
-          main { overflow: visible !important; }
-          .invoice-sheet {
-            box-shadow: none !important;
-            border: none !important;
-            max-width: 100% !important;
-            margin: 0 !important;
-          }
-        }
-      `}</style>
+      {/* Print rules now live in styles/index.css so the offline bill gets
+          them too — it previously had none. */}
     </div>
   );
 }

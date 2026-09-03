@@ -13,8 +13,10 @@ from app.db.models.user import UserRole
 from app.schemas.common import Page
 from app.schemas.sale import (
     SaleCreate,
+    SaleLineReturnable,
     SalePaymentCollect,
     SaleRead,
+    SaleReturnCreate,
     SaleSummary,
     SaleVoidRequest,
 )
@@ -141,3 +143,34 @@ async def void_sale(
         changes={"reason": payload.reason},
     )
     return SaleRead.model_validate(sale)
+
+
+@router.get(
+    "/{sale_id}/returnable",
+    response_model=list[SaleLineReturnable],
+    summary="How much of each line on this bill can still be credited.",
+)
+async def returnable_lines(sale_id: uuid.UUID, db: DbSession) -> list[SaleLineReturnable]:
+    return await SaleService(db).returnable_lines(sale_id)
+
+
+@router.post(
+    "/{sale_id}/returns",
+    response_model=SaleRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Credit part or all of a bill — puts stock back and refunds money.",
+    dependencies=[Depends(require_min_role(UserRole.CASHIER))],
+)
+async def create_return(
+    sale_id: uuid.UUID,
+    payload: SaleReturnCreate,
+    db: DbSession,
+    user: CurrentUser,
+) -> SaleRead:
+    """A return is recorded as a credit note: a sale row with negative money.
+
+    The service audits it against the original invoice, so no second audit call
+    is made here — one action, one entry.
+    """
+    credit = await SaleService(db).create_return(sale_id, payload, user_id=user.id)
+    return SaleRead.model_validate(credit)

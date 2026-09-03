@@ -149,7 +149,7 @@ function LocalSaleRow({ sale }: { sale: LocalSaleSummary }): JSX.Element {
           {sale.localReference ?? sale.id.slice(0, 8)}
         </Link>
         {sale.invoiceNumber && (
-          <div className="font-mono text-[10px] text-emerald-300/80">{sale.invoiceNumber}</div>
+          <div className="font-mono text-xs text-emerald-300/80">{sale.invoiceNumber}</div>
         )}
       </td>
       <td className="py-2 pr-3 text-xs text-slate-300">
@@ -182,15 +182,15 @@ function SyncDetail({ sale }: { sale: LocalSaleSummary }): JSX.Element {
   }
 
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-1">
       <div>{syncStateHint(sale.state)}</div>
       {sale.error && (
-        <div className="font-mono text-[10px] text-slate-500" title={sale.error}>
+        <div className="font-mono text-xs text-slate-500" title={sale.error}>
           {sale.error.length > 90 ? `${sale.error.slice(0, 90)}…` : sale.error}
         </div>
       )}
       {(sale.attemptCount > 0 || sale.nextAttemptAt) && (
-        <div className="text-[10px] text-slate-500">
+        <div className="text-xs text-slate-500">
           {sale.attemptCount > 0 &&
             `${sale.attemptCount} attempt${sale.attemptCount === 1 ? '' : 's'}`}
           {sale.attemptCount > 0 && sale.nextAttemptAt && ' · '}

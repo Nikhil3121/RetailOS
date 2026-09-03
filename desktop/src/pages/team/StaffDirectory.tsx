@@ -89,7 +89,7 @@ export function StaffDirectory(): JSX.Element {
             <button
               type="button"
               onClick={() => copy(u.staff_code!)}
-              className="group inline-flex items-center gap-1.5 rounded-md border border-cobalt-500/30 bg-cobalt-500/10 px-2 py-1 font-mono text-xs text-cobalt-100 hover:bg-cobalt-500/20"
+              className="group inline-flex items-center gap-2 rounded-md border border-cobalt-500/30 bg-cobalt-500/10 px-2 py-1 font-mono text-xs text-cobalt-100 hover:bg-cobalt-500/20"
               title="Click to copy"
             >
               <IdCard className="h-3 w-3" />
@@ -108,7 +108,7 @@ export function StaffDirectory(): JSX.Element {
             <div className="flex items-center gap-2 font-medium text-white">
               {u.full_name}
               {!u.is_active && (
-                <span className="rounded-md border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-rose-200">
+                <span className="rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-xs uppercase tracking-wider text-rose-200">
                   Inactive
                 </span>
               )}
@@ -121,7 +121,7 @@ export function StaffDirectory(): JSX.Element {
         key: 'role',
         header: 'Role',
         cell: (u) => (
-          <span className="rounded-md border border-border bg-white/[0.03] px-2 py-0.5 text-[11px] uppercase tracking-wider text-slate-300">
+          <span className="rounded-md border border-border bg-white/[0.03] px-2 py-1 text-xs uppercase tracking-wider text-slate-300">
             {ROLE_LABEL[u.role]}
           </span>
         ),
@@ -263,7 +263,7 @@ function SummaryTile({
         : 'text-rose-200';
   return (
     <GlassCard className="p-4">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+      <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
         {label}
       </div>
       <div className={cn('mt-1 font-mono text-2xl font-semibold', cls)}>{value}</div>

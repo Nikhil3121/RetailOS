@@ -68,7 +68,7 @@ export function AuditLog(): JSX.Element {
         header: 'Action',
         cell: (r) => (
           <span
-            className={`inline-flex items-center rounded-md border px-2 py-0.5 font-mono text-[10px] ${toneFor(r.action)}`}
+            className={`inline-flex items-center rounded-md border px-2 py-1 font-mono text-xs ${toneFor(r.action)}`}
           >
             {r.action}
           </span>
@@ -81,11 +81,11 @@ export function AuditLog(): JSX.Element {
           <div>
             <div className="text-slate-100">{r.summary}</div>
             {Object.keys(r.changes).length > 0 && (
-              <details className="mt-1 text-[10px] text-slate-500">
+              <details className="mt-1 text-xs text-slate-500">
                 <summary className="cursor-pointer text-slate-500 hover:text-slate-300">
                   changes ({Object.keys(r.changes).length})
                 </summary>
-                <pre className="mt-1 overflow-auto rounded-md border border-border bg-white/[0.02] p-2 text-[10px] text-slate-300">
+                <pre className="mt-1 overflow-auto rounded-md border border-border bg-white/[0.02] p-2 text-xs text-slate-300">
                   {JSON.stringify(r.changes, null, 2)}
                 </pre>
               </details>
@@ -100,7 +100,7 @@ export function AuditLog(): JSX.Element {
           <div>
             <div className="text-slate-200">{r.actor_email ?? <span className="text-slate-500">system</span>}</div>
             {r.ip_address && (
-              <div className="font-mono text-[10px] text-slate-500">{r.ip_address}</div>
+              <div className="font-mono text-xs text-slate-500">{r.ip_address}</div>
             )}
           </div>
         ),
@@ -113,7 +113,7 @@ export function AuditLog(): JSX.Element {
             <div>
               <div className="text-xs text-slate-300">{r.entity_type}</div>
               {r.entity_id && (
-                <div className="font-mono text-[9px] text-slate-500">
+                <div className="font-mono text-xs text-slate-500">
                   {r.entity_id.slice(0, 8)}
                 </div>
               )}
@@ -133,7 +133,7 @@ export function AuditLog(): JSX.Element {
         description="Every meaningful mutation, immutable and append-only. Auto-refreshes every 30 seconds."
       />
 
-      <div className="glass flex flex-wrap items-end gap-3 p-4">
+      <div className="glass inline-flex w-fit max-w-full flex-wrap items-end gap-3 px-3 py-2">
         <div className="min-w-[240px] flex-1">
           <Input
             placeholder="Search summary, action, actor email"
@@ -185,7 +185,7 @@ export function AuditLog(): JSX.Element {
       />
 
       <div className="flex items-start gap-2 rounded-xl border border-border bg-white/[0.02] px-3 py-2 text-xs text-slate-400">
-        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
+        <Info className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-500" />
         <span>
           Audit covers login/logout, sale create/void, expense approve/reject, and
           user create/update/delete. To extend to catalog / inventory / PO changes,

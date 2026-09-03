@@ -264,7 +264,7 @@ export function Dashboard(): JSX.Element {
               ]}
             />
           </div>
-          <ul className="mt-4 space-y-1.5 text-xs">
+          <ul className="mt-4 space-y-2 text-xs">
             <LegendRow
               icon={<Banknote className="h-3.5 w-3.5" />}
               swatch="bg-cobalt-400"
@@ -397,7 +397,7 @@ export function Dashboard(): JSX.Element {
       {/* Profit disclosure */}
       {show('profit-note') && (
       <div className="flex items-start gap-2 rounded-xl border border-border bg-white/[0.02] px-3 py-2 text-xs text-slate-400">
-        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
+        <Info className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-500" />
         <span>
           <strong className="text-slate-300">Profit is estimated.</strong>{' '}
           Uses the variant's <em>current</em> cost price as a proxy for cost at time of sale.

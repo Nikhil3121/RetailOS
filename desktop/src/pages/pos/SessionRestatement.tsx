@@ -24,10 +24,10 @@ function money(value: unknown): string {
 export function RestatementBanner({ restatedAt }: { restatedAt: string }): JSX.Element {
   return (
     <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+      <TriangleAlert className="mt-1 h-4 w-4 shrink-0" />
       <div>
         <div className="font-medium">This shift was restated after it was closed.</div>
-        <p className="mt-0.5 text-xs text-amber-200/80">
+        <p className="mt-1 text-xs text-amber-200/80">
           An offline bill from this shift reached the server on{' '}
           {new Date(restatedAt).toLocaleString()}. Expected cash and the cash
           difference were recalculated to include it. The cash that was counted
@@ -80,7 +80,7 @@ export function RestatementHistory({ sessionId }: { sessionId: string }): JSX.El
                 <span className="text-slate-300">
                   {new Date(entry.created_at).toLocaleString()}
                 </span>
-                <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] text-amber-300">
+                <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 font-mono text-xs text-amber-300">
                   {String(c.reason ?? 'restated')}
                 </span>
               </div>
@@ -98,7 +98,7 @@ export function RestatementHistory({ sessionId }: { sessionId: string }): JSX.El
                 />
               </div>
 
-              <div className="mt-2 border-t border-border/70 pt-2 text-[11px] text-slate-500">
+              <div className="mt-2 border-t border-border/70 pt-2 text-xs text-slate-500">
                 Counted cash unchanged at {money(c.counted_cash_unchanged)} · caused by sale{' '}
                 <span className="font-mono">{String(c.caused_by_sale_id ?? '—').slice(0, 8)}</span>
               </div>

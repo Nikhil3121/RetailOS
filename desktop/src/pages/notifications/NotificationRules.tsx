@@ -93,7 +93,7 @@ export function NotificationRules(): JSX.Element {
         key: 'kind',
         header: 'Fires on',
         cell: (r) => (
-          <span className="rounded-md border border-cobalt-500/30 bg-cobalt-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-cobalt-200">
+          <span className="rounded-md border border-cobalt-500/30 bg-cobalt-500/10 px-2 py-1 text-xs uppercase tracking-wider text-cobalt-200">
             {KIND_LABEL[r.kind]}
           </span>
         ),
@@ -115,7 +115,7 @@ export function NotificationRules(): JSX.Element {
             {r.channels.map((c) => (
               <span
                 key={c}
-                className="rounded-md border border-border bg-white/[0.02] px-1.5 py-0.5 text-[10px] text-slate-300"
+                className="rounded-md border border-border bg-white/[0.02] px-2 py-1 text-xs text-slate-300"
               >
                 {CHANNEL_LABEL[c as keyof typeof CHANNEL_LABEL] ?? c}
               </span>
@@ -133,11 +133,11 @@ export function NotificationRules(): JSX.Element {
         header: 'Status',
         cell: (r) =>
           r.is_active ? (
-            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-200">
+            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-200">
               Active
             </span>
           ) : (
-            <span className="rounded-full border border-border bg-white/[0.02] px-2 py-0.5 text-xs text-slate-400">
+            <span className="rounded-full border border-border bg-white/[0.02] px-2 py-1 text-xs text-slate-400">
               Inactive
             </span>
           ),
@@ -304,7 +304,7 @@ function CreateRuleModal({
         </div>
 
         <div>
-          <div className="mb-1.5 text-xs font-medium uppercase tracking-wider text-slate-400">
+          <div className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
             Channels
           </div>
           <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-white/[0.02] p-3 text-sm text-slate-300 md:grid-cols-4">
@@ -318,11 +318,11 @@ function CreateRuleModal({
             </label>
             <label className="flex items-center gap-2 text-slate-500">
               <input type="checkbox" className="accent-cobalt-500" {...register('channel_whatsapp')} />
-              WhatsApp <span className="text-[10px]">(stub)</span>
+              WhatsApp <span className="text-xs">(stub)</span>
             </label>
             <label className="flex items-center gap-2 text-slate-500">
               <input type="checkbox" className="accent-cobalt-500" {...register('channel_push')} />
-              Push <span className="text-[10px]">(stub)</span>
+              Push <span className="text-xs">(stub)</span>
             </label>
           </div>
         </div>

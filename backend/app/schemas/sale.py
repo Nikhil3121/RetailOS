@@ -8,7 +8,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
-from app.db.models.sale import PaymentMethod, SaleStatus
+from app.db.models.sale import PaymentMethod, SaleDocType, SaleStatus
 from app.schemas.common import ORMModel
 
 _ZERO = Decimal("0.00")
@@ -120,6 +120,67 @@ class SaleVoidRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=255)
 
 
+# ---------------------------------------------------------------------------
+# Returns / credit notes
+# ---------------------------------------------------------------------------
+class SaleReturnLineInput(BaseModel):
+    """One line coming back, identified by the ORIGINAL sale line.
+
+    The caller names a line on the invoice and says how many units are being
+    returned. Quantity is POSITIVE here — "two of these are coming back" is what
+    a person means and what a UI collects. The service negates it on the way
+    into storage. Keeping the sign conversion in exactly one place is what stops
+    a caller from accidentally crediting a customer twice by sending -2.
+    """
+
+    sale_line_id: uuid.UUID
+    quantity: Decimal = Field(
+        gt=0,
+        decimal_places=3,
+        max_digits=14,
+        description="Units coming back. Must not exceed what remains returnable on that line.",
+    )
+
+
+class SaleReturnCreate(BaseModel):
+    """Body for `POST /sales/{sale_id}/returns`.
+
+    Price, discount and tax are NOT accepted. They are copied from the original
+    line so a credit note can never disagree with the invoice it reverses —
+    which is the single most important property of a return.
+    """
+
+    lines: list[SaleReturnLineInput] = Field(min_length=1)
+    refunds: list[SalePaymentInput] = Field(
+        default_factory=list,
+        description=(
+            "Money going back to the customer, as POSITIVE amounts. Stored "
+            "negative. May be empty when the credit is left on account rather "
+            "than refunded."
+        ),
+    )
+    reason: str = Field(min_length=1, max_length=255)
+    notes: str | None = None
+    client_uuid: str | None = Field(default=None, max_length=64)
+    occurred_at: datetime | None = None
+    terminal_uuid: str | None = Field(default=None, max_length=64)
+    day_session_id: uuid.UUID | None = None
+
+
+class SaleLineReturnable(BaseModel):
+    """How much of one invoice line can still be credited."""
+
+    sale_line_id: uuid.UUID
+    variant_id: uuid.UUID
+    product_name: str
+    variant_name: str
+    sku: str
+    unit_price: Decimal
+    sold_quantity: Decimal
+    returned_quantity: Decimal
+    returnable_quantity: Decimal
+
+
 class SalePaymentCollect(BaseModel):
     """Body for `POST /sales/{sale_id}/payments` — collect against an outstanding bill."""
 
@@ -163,6 +224,10 @@ class SaleRead(ORMModel):
     day_session_id: uuid.UUID
     customer_id: uuid.UUID | None
     status: SaleStatus
+    # A credit note is the same shape with negative money. Clients must read
+    # doc_type before presenting a figure, or a refund reads as a sale.
+    doc_type: SaleDocType = SaleDocType.SALE
+    original_sale_id: uuid.UUID | None = None
     subtotal: Decimal
     discount_total: Decimal
     tax_total: Decimal

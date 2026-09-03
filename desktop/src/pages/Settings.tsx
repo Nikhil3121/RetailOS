@@ -239,7 +239,7 @@ function TwoFactorSetupModal({
         </ol>
 
         <div className="rounded-xl border border-border bg-white/[0.02] p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
             Setup key
           </div>
           <div className="mt-1 flex items-center justify-between gap-3">
@@ -259,10 +259,10 @@ function TwoFactorSetupModal({
           </div>
           {setup?.provisioning_uri && (
             <div className="mt-3">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 otpauth:// URI (QR-scan friendly)
               </div>
-              <code className="mt-1 block break-all font-mono text-[10px] text-slate-400">
+              <code className="mt-1 block break-all font-mono text-xs text-slate-400">
                 {setup.provisioning_uri}
               </code>
             </div>

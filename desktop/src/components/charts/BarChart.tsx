@@ -47,7 +47,7 @@ export function BarChart({
               className="w-full rounded-t-md bg-gradient-to-t from-cobalt-700 via-cobalt-500 to-aurora-400 transition-all"
               style={{ height: `${h}px` }}
             />
-            <div className="text-[10px] text-slate-500">{d.label}</div>
+            <div className="text-xs text-slate-500">{d.label}</div>
           </div>
         );
       })}

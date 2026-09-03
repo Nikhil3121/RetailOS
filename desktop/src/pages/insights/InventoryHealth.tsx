@@ -153,7 +153,7 @@ export function InventoryHealth(): JSX.Element {
         key: 'cat',
         header: 'Category',
         cell: (r) => (
-          <span className={`rounded-full border px-2 py-0.5 text-xs ${STOCK_TONE[r.category]}`}>
+          <span className={`rounded-full border px-2 py-1 text-xs ${STOCK_TONE[r.category]}`}>
             {STOCK_LABEL[r.category]}
           </span>
         ),
@@ -206,7 +206,7 @@ export function InventoryHealth(): JSX.Element {
         key: 'cat',
         header: 'Category',
         cell: (r) => (
-          <span className={`rounded-full border px-2 py-0.5 text-xs ${MOVEMENT_TONE[r.category]}`}>
+          <span className={`rounded-full border px-2 py-1 text-xs ${MOVEMENT_TONE[r.category]}`}>
             {MOVEMENT_LABEL[r.category]}
           </span>
         ),
@@ -436,7 +436,7 @@ export function InventoryHealth(): JSX.Element {
       </div>
 
       <div className="flex items-start gap-2 rounded-xl border border-border bg-white/[0.02] px-3 py-2 text-xs text-slate-400">
-        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
+        <Info className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-500" />
         <span>
           Set <strong className="text-slate-200">reorder point</strong> +{' '}
           <strong className="text-slate-200">reorder quantity</strong> on your variants

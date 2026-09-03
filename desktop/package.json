@@ -84,6 +84,7 @@
           ]
         }
       ],
+      "icon": "build/icon.ico",
       "artifactName": "RetailOS-Setup-${version}.${ext}"
     },
     "nsis": {

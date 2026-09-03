@@ -13,8 +13,9 @@ import { UserMenu } from './UserMenu';
 export function TitleBar(): JSX.Element {
   return (
     <header className="titlebar-drag relative z-[9999] flex h-11 shrink-0 items-center justify-between border-b border-border/60 bg-ink-900/70 px-4 backdrop-blur-xl">
-      <div className="flex items-center gap-2 text-sm font-medium tracking-tight text-slate-300">
-        <Logo size={24} />
+      {/* The symbol carries the JR; the text completes the name beside it. */}
+      <div className="flex items-center gap-3 text-sm font-medium tracking-tight text-slate-300">
+        <Logo size={22} />
         <span>
           Retail<span className="font-bold text-white">OS</span>
         </span>

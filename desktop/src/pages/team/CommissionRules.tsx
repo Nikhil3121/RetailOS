@@ -89,7 +89,7 @@ export function CommissionRules(): JSX.Element {
         header: 'Scope',
         cell: (r) => (
           <div>
-            <span className="rounded-md border border-cobalt-500/30 bg-cobalt-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-cobalt-200">
+            <span className="rounded-md border border-cobalt-500/30 bg-cobalt-500/10 px-2 py-1 text-xs uppercase tracking-wider text-cobalt-200">
               {SCOPE_LABEL[r.scope]}
             </span>
             <div className="mt-1 text-xs text-slate-400">{targetName(r)}</div>
@@ -127,11 +127,11 @@ export function CommissionRules(): JSX.Element {
         header: 'Status',
         cell: (r) =>
           r.is_active ? (
-            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-200">
+            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-200">
               Active
             </span>
           ) : (
-            <span className="rounded-full border border-border bg-white/[0.02] px-2 py-0.5 text-xs text-slate-400">
+            <span className="rounded-full border border-border bg-white/[0.02] px-2 py-1 text-xs text-slate-400">
               Inactive
             </span>
           ),

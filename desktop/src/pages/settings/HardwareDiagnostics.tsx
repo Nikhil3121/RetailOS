@@ -54,10 +54,10 @@ export function HardwareDiagnostics(): JSX.Element {
 function NotVerifiedNotice(): JSX.Element {
   return (
     <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+      <TriangleAlert className="mt-1 h-4 w-4 shrink-0" />
       <div>
         <div className="font-medium">Not yet tested with real hardware.</div>
-        <p className="mt-0.5 text-xs text-amber-200/80">
+        <p className="mt-1 text-xs text-amber-200/80">
           The scanner and printer software is built and tested, but no physical
           scanner or thermal printer has been connected yet. Use this screen to
           check them when the hardware arrives.
@@ -203,7 +203,7 @@ function PrinterTest(): JSX.Element {
           Printer
         </div>
         <span
-          className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${
+          className={`rounded-md border px-2 py-1 text-xs font-medium ${
             status.ready
               ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
               : 'border-slate-500/30 bg-slate-500/10 text-slate-300'
@@ -311,7 +311,7 @@ function Result({
       <dl className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
         {rows.map(([label, value]) => (
           <div key={label}>
-            <dt className="text-[11px] uppercase tracking-wider text-slate-500">{label}</dt>
+            <dt className="text-xs uppercase tracking-wider text-slate-500">{label}</dt>
             <dd className="break-all font-mono text-xs text-slate-300">{value}</dd>
           </div>
         ))}

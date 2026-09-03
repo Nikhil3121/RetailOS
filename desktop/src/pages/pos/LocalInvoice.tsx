@@ -135,7 +135,7 @@ export function LocalInvoice(): JSX.Element {
           leadingIcon={<ArrowLeft className="h-4 w-4" />}
           onClick={() => navigate('/billing')}
         >
-          Back to billing
+          Back to bill
         </Button>
         <Button
           leadingIcon={<Printer className="h-4 w-4" />}
@@ -147,7 +147,7 @@ export function LocalInvoice(): JSX.Element {
 
       {/* Sync state is information, not an error — the bill is already valid. */}
       {sale.syncStatus !== 'SYNCED' && (
-        <div className="no-print flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-200">
+        <div className="no-print flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
           <CloudOff className="h-4 w-4 shrink-0" />
           <span>
             Saved on this terminal and queued to sync. The final GST invoice
@@ -159,7 +159,7 @@ export function LocalInvoice(): JSX.Element {
       {/* Provenance. `no-print` on purpose: the customer's copy shows the
           bill, not the terminal's internal identifiers. This block exists so
           staff can trace a bill end to end without a database tool. */}
-      <details className="no-print rounded-xl border border-border bg-white/[0.02] px-4 py-2.5 text-sm">
+      <details className="no-print rounded-xl border border-border bg-white/[0.02] px-4 py-3 text-sm">
         <summary className="cursor-pointer text-slate-300">Sale details &amp; sync</summary>
         <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
           <Detail label="Local reference" value={sale.localReference} mono />
@@ -206,11 +206,11 @@ export function LocalInvoice(): JSX.Element {
             <div className="font-mono text-sm text-white">
               {sale.invoiceNumber ?? sale.localReference ?? sale.id.slice(0, 8)}
             </div>
-            <div className="mt-1 text-[11px] uppercase tracking-wider text-slate-500">
+            <div className="mt-1 text-xs uppercase tracking-wider text-slate-500">
               {sale.invoiceNumber ? 'Invoice no.' : 'Local reference'}
             </div>
             {/* The internal id is the permanent trace back to this row. */}
-            <div className="mt-2 font-mono text-[10px] text-slate-600">
+            <div className="mt-2 font-mono text-xs text-slate-600">
               {sale.id}
             </div>
           </div>
@@ -219,7 +219,7 @@ export function LocalInvoice(): JSX.Element {
         <div className="overflow-x-auto py-4">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-[11px] uppercase tracking-wider text-slate-500">
+              <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-slate-500">
                 <th className="py-2 pr-2">#</th>
                 <th className="py-2 pr-2">Item</th>
                 <th className="py-2 pr-2 text-right">Qty</th>
@@ -236,7 +236,7 @@ export function LocalInvoice(): JSX.Element {
                   <td className="py-2 pr-2">
                     <div className="text-slate-100">{item.productName}</div>
                     {item.sku && (
-                      <div className="font-mono text-[11px] text-slate-500">{item.sku}</div>
+                      <div className="font-mono text-xs text-slate-500">{item.sku}</div>
                     )}
                   </td>
                   <td className="py-2 pr-2 text-right">{item.quantity}</td>
@@ -246,7 +246,7 @@ export function LocalInvoice(): JSX.Element {
                   </td>
                   <td className="py-2 pr-2 text-right">
                     {taxPercent(item.taxRateBp)}%
-                    <div className="text-[11px] text-slate-500">
+                    <div className="text-xs text-slate-500">
                       ₹{money(item.taxPaise)}
                     </div>
                   </td>
@@ -259,7 +259,7 @@ export function LocalInvoice(): JSX.Element {
           </table>
         </div>
 
-        <div className="ml-auto w-full max-w-xs space-y-1.5 border-t border-border pt-4 text-sm tabular-nums">
+        <div className="ml-auto w-full max-w-xs space-y-2 border-t border-border pt-4 text-sm tabular-nums">
           <Row label="Gross" value={money(grossPaise)} />
           {sale.discountPaise > 0 && (
             <Row label="Discount" value={`− ${money(sale.discountPaise)}`} />

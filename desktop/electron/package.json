@@ -1,0 +1,4 @@
+{
+  "//": "Marks the main-process sources as CommonJS. desktop/package.json declares \"type\": \"module\" for the Vite renderer, and under Node16 module resolution TypeScript reads the NEAREST package.json to decide a file's module kind. Without this file every electron/*.ts would be treated as ESM and tsc would demand a .js extension on every relative import. Mirrors the {\"type\":\"commonjs\"} that scripts/build-electron-main.mjs already writes into dist-electron.",
+  "type": "commonjs"
+}

@@ -87,7 +87,7 @@ export function Purchases(): JSX.Element {
         }
       />
 
-      <div className="glass flex items-end gap-3 p-4">
+      <div className="glass inline-flex w-fit max-w-full flex-wrap items-end gap-3 px-3 py-2">
         <div className="min-w-[220px]">
           <Select
             options={STATUS_OPTIONS.filter((o) => o.value !== '') as { label: string; value: string }[]}
@@ -122,7 +122,7 @@ function StatusBadge({ status }: { status: POStatus }): JSX.Element {
     cancelled: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
   }[status];
   return (
-    <span className={`rounded-full border px-2 py-0.5 text-xs ${tone}`}>
+    <span className={`rounded-full border px-2 py-1 text-xs ${tone}`}>
       {PO_STATUS_LABEL[status]}
     </span>
   );

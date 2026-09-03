@@ -1,23 +1,109 @@
 /**
- * Logo — the RetailOS mark. Same geometry as the PDF + the mobile
- * `Logo.tsx` (react-native-svg); one identity across every surface.
+ * The JR Retail OS brand marks.
  *
- * variant="tile"  full cobalt-gradient tile + pulse + trace (default)
- * variant="bare"  mark only, currentColor fill
- * variant="mono"  bare + no pulse, for monochrome contexts
+ * TWO assets, not one, because a single file cannot serve every size. The
+ * lockup carries the "RETAIL OS" wordmark under the symbol; below roughly
+ * 60px tall that wordmark stops being legible and turns into a grey smear.
+ * So small placements get the symbol alone and large ones get the lockup.
+ *
+ *   <Logo />         symbol only — title bar, compact chrome
+ *   <Wordmark />     full lockup — login, splash, documents
+ *
+ * Both are transparent PNGs and carry their own colour, so they sit correctly
+ * on the light and the dark theme without a variant switch.
  */
 
+import markSrc from '@/assets/brand/logo-mark@128.png';
+import markDarkSrc from '@/assets/brand/logo-mark-dark@128.png';
+import lockupSrc from '@/assets/brand/logo-lockup@720.png';
+import lockupDarkSrc from '@/assets/brand/logo-lockup-dark@720.png';
+
+import { cn } from '@/lib/cn';
+
+/**
+ * Two grounds, two files.
+ *
+ * The mark's navy half disappears on the dark theme, so a light-ink variant
+ * exists alongside it. Both are rendered and CSS shows the right one — see
+ * `.brand-on-light` / `.brand-on-dark` in styles/index.css. Doing it in CSS
+ * rather than by subscribing to theme state avoids a flash of the wrong mark
+ * on first paint.
+ */
 interface LogoProps {
+  /** Rendered HEIGHT in px. Width follows the mark's own aspect ratio. */
   size?: number;
-  variant?: 'tile' | 'bare' | 'mono';
   className?: string;
 }
 
-export function Logo({
+export function Logo({ size = 24, className }: LogoProps): JSX.Element {
+  const common = {
+    alt: '',
+    'aria-hidden': true as const,
+    style: { height: size, width: 'auto' as const },
+    draggable: false,
+  };
+  return (
+    <>
+      <img src={markSrc} {...common} className={cn('brand-on-light', className)} />
+      <img src={markDarkSrc} {...common} className={cn('brand-on-dark', className)} />
+    </>
+  );
+}
+
+interface WordmarkProps {
+  /** Rendered WIDTH in px — the lockup is wider than it is tall. */
+  width?: number;
+  className?: string;
+  /** Accessible name. Empty string marks it decorative. */
+  alt?: string;
+}
+
+export function Wordmark({
+  width = 220,
+  className,
+  alt = 'JR Retail OS',
+}: WordmarkProps): JSX.Element {
+  const common = {
+    style: { width, height: 'auto' as const },
+    draggable: false,
+  };
+  return (
+    <>
+      <img
+        src={lockupSrc}
+        alt={alt}
+        {...common}
+        className={cn('brand-on-light', className)}
+      />
+      {/* The second copy is decorative — the accessible name is already
+          carried by the first, and only one is ever visible. */}
+      <img
+        src={lockupDarkSrc}
+        alt=""
+        aria-hidden
+        {...common}
+        className={cn('brand-on-dark', className)}
+      />
+    </>
+  );
+}
+
+/**
+ * The previous hand-drawn cobalt "R" tile.
+ *
+ * Kept, not deleted: it is pure SVG with no asset dependency, which makes it
+ * the only mark usable in a context where the PNGs cannot be bundled (an
+ * emailed HTML report, an inline signature). Nothing renders it today.
+ */
+export function LegacyLogo({
   size = 24,
   variant = 'tile',
   className,
-}: LogoProps): JSX.Element {
+}: {
+  size?: number;
+  variant?: 'tile' | 'bare' | 'mono';
+  className?: string;
+}): JSX.Element {
   return (
     <svg
       width={size}

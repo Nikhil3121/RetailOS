@@ -144,7 +144,7 @@ export function Commissions(): JSX.Element {
         description="Rolls up commission per staff for the selected window using the currently active rules."
       />
 
-      <div className="glass flex flex-wrap items-end gap-3 p-4">
+      <div className="glass inline-flex w-fit max-w-full flex-wrap items-end gap-3 px-3 py-2">
         <div className="min-w-[160px]">
           <Input label="From" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
         </div>
@@ -220,7 +220,7 @@ export function Commissions(): JSX.Element {
             empty={breakdownQuery.isLoading ? 'Loading…' : 'No lines.'}
           />
           <div className="flex items-start gap-2 rounded-xl border border-border bg-white/[0.02] px-3 py-2 text-xs text-slate-400">
-            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
+            <Info className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-500" />
             "No matching rule" means no active rule applied to that line — either no rule targets
             the product's category / brand, or every candidate rule was outside its effective window.
           </div>

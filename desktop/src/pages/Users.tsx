@@ -71,11 +71,11 @@ export function Users(): JSX.Element {
         header: 'Status',
         cell: (u) =>
           u.is_active ? (
-            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-200">
+            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-200">
               Active
             </span>
           ) : (
-            <span className="rounded-full border border-border bg-white/[0.02] px-2 py-0.5 text-xs text-slate-400">
+            <span className="rounded-full border border-border bg-white/[0.02] px-2 py-1 text-xs text-slate-400">
               Inactive
             </span>
           ),
@@ -168,7 +168,7 @@ function RoleBadge({ role }: { role: UserRole }): JSX.Element {
     staff: 'border-border bg-white/[0.02] text-slate-300',
   };
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${tone[role]}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs ${tone[role]}`}>
       {role === 'super_admin' && <ShieldCheck className="h-3 w-3" />}
       {ROLE_LABEL[role]}
     </span>

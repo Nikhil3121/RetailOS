@@ -130,7 +130,7 @@ export function StaffPerformance(): JSX.Element {
         description="Sales credited to each staff member in the selected window. Attribution uses the Salesperson set on the bill; when unset it falls back to the cashier who rang it up."
       />
 
-      <div className="glass flex flex-wrap items-end gap-3 p-4">
+      <div className="glass inline-flex w-fit max-w-full flex-wrap items-end gap-3 px-3 py-2">
         <div className="min-w-[160px]">
           <Input label="From" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
         </div>
@@ -193,7 +193,7 @@ export function StaffPerformance(): JSX.Element {
       />
 
       <div className="flex items-start gap-2 rounded-xl border border-border bg-white/[0.02] px-3 py-2 text-xs text-slate-400">
-        <TrendingUp className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
+        <TrendingUp className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-500" />
         Attribution:{' '}
         <code className="text-slate-300">Sale.salesperson_user_id</code> when set (from the Billing
         salesperson picker), else <code className="text-slate-300">Sale.created_by_user_id</code>{' '}

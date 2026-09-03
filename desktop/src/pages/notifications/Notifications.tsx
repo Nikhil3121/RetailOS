@@ -75,7 +75,7 @@ export function Notifications(): JSX.Element {
           <div className="flex items-start gap-3">
             <span
               className={cn(
-                'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border',
+                'mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border',
                 SEVERITY_TONE[n.severity],
               )}
             >
@@ -89,7 +89,7 @@ export function Notifications(): JSX.Element {
                 )}
               </div>
               {n.body && (
-                <p className="mt-0.5 whitespace-pre-line text-xs text-slate-400">
+                <p className="mt-1 whitespace-pre-line text-xs text-slate-400">
                   {n.body}
                 </p>
               )}
@@ -101,7 +101,7 @@ export function Notifications(): JSX.Element {
         key: 'kind',
         header: 'Kind',
         cell: (n) => (
-          <span className="rounded-md border border-border bg-white/[0.03] px-2 py-0.5 text-[10px] uppercase tracking-wider text-slate-300">
+          <span className="rounded-md border border-border bg-white/[0.03] px-2 py-1 text-xs uppercase tracking-wider text-slate-300">
             {KIND_LABEL[n.kind]}
           </span>
         ),
@@ -114,7 +114,7 @@ export function Notifications(): JSX.Element {
             {n.channels.map((ch) => (
               <span
                 key={ch}
-                className="rounded-md border border-border bg-white/[0.02] px-1.5 py-0.5 text-[10px] text-slate-400"
+                className="rounded-md border border-border bg-white/[0.02] px-2 py-1 text-xs text-slate-400"
               >
                 {CHANNEL_LABEL[ch as keyof typeof CHANNEL_LABEL] ?? ch}
               </span>
@@ -141,7 +141,7 @@ export function Notifications(): JSX.Element {
               Mark read
             </Button>
           ) : (
-            <span className="text-[10px] text-slate-500">
+            <span className="text-xs text-slate-500">
               read {new Date(n.read_at).toLocaleString()}
             </span>
           ),
@@ -167,7 +167,7 @@ export function Notifications(): JSX.Element {
         }
       />
 
-      <div className="glass flex items-end gap-3 p-4">
+      <div className="glass inline-flex w-fit max-w-full flex-wrap items-end gap-3 px-3 py-2">
         <div className="min-w-[200px]">
           <Select
             options={[

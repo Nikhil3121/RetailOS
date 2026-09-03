@@ -44,6 +44,35 @@ class SaleStatus(str, Enum):
     VOIDED = "voided"
 
 
+class SaleDocType(str, Enum):
+    """What kind of document a `sales` row is.
+
+    STATUS AND TYPE ARE DIFFERENT AXES and must not be conflated. `status` says
+    whether the document still stands; `doc_type` says what it is. A credit note
+    can itself be voided, which is only expressible if the two stay separate.
+    """
+
+    SALE = "sale"
+    RETURN = "return"
+
+
+class _SaleDocTypeType(TypeDecorator):
+    impl = String(16)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):  # type: ignore[override]
+        if value is None:
+            return None
+        if isinstance(value, SaleDocType):
+            return value.value
+        return SaleDocType(value).value
+
+    def process_result_value(self, value, dialect):  # type: ignore[override]
+        if value is None:
+            return None
+        return SaleDocType(value)
+
+
 class PaymentMethod(str, Enum):
     CASH = "cash"
     CARD = "card"
@@ -95,7 +124,14 @@ class SaleNumberSequence(UUIDPKMixin, TimestampMixin, Base):
 
     __tablename__ = "sale_number_sequences"
     __table_args__ = (
-        UniqueConstraint("store_id", "year_month", name="uq_sale_number_sequences_store_month"),
+        # Credit notes must carry their own serial series under GST, so the
+        # counter is keyed by document type as well as store and month.
+        UniqueConstraint(
+            "store_id",
+            "year_month",
+            "doc_type",
+            name="uq_sale_number_sequences_store_month_type",
+        ),
     )
 
     store_id: Mapped[uuid.UUID] = mapped_column(
@@ -105,6 +141,7 @@ class SaleNumberSequence(UUIDPKMixin, TimestampMixin, Base):
         index=True,
     )
     year_month: Mapped[str] = mapped_column(String(6), nullable=False, index=True)  # e.g. "202607"
+    doc_type: Mapped[str] = mapped_column(String(16), nullable=False, default="sale")
     next_seq: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
@@ -160,6 +197,23 @@ class Sale(UUIDPKMixin, TimestampMixin, Base):
 
     status: Mapped[SaleStatus] = mapped_column(
         _SaleStatusType(), nullable=False, default=SaleStatus.COMPLETED, index=True
+    )
+
+    # ---- returns / credit notes -------------------------------------------
+    # A return is this same row shape with NEGATIVE money and doc_type=RETURN.
+    # Storing the sign here is what keeps every existing SUM() correct without
+    # modification: revenue nets returns out, and a cash refund subtracts itself
+    # from the shift's expected cash. See migration 0016 for the full rationale.
+    doc_type: Mapped[SaleDocType] = mapped_column(
+        _SaleDocTypeType(), nullable=False, default=SaleDocType.SALE, index=True
+    )
+    # The invoice this credit note reverses. Always set on a return, always NULL
+    # on a sale.
+    original_sale_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("sales.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
     )
 
     # Financials — every column recomputed on create from line inputs.

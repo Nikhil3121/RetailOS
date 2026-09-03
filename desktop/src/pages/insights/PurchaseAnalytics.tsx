@@ -151,7 +151,7 @@ export function PurchaseAnalytics(): JSX.Element {
         description="Supplier performance, spend trends, and product-level purchase cost."
       />
 
-      <div className="glass flex items-end gap-3 p-4">
+      <div className="glass inline-flex w-fit max-w-full flex-wrap items-end gap-3 px-3 py-2">
         <div className="min-w-[160px]">
           <Input label="From" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
         </div>
@@ -233,7 +233,7 @@ export function PurchaseAnalytics(): JSX.Element {
       </div>
 
       <div className="flex items-start gap-2 rounded-xl border border-border bg-white/[0.02] px-3 py-2 text-xs text-slate-400">
-        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
+        <Info className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-500" />
         <span>
           Avg turnaround is computed from POs where{' '}
           <strong className="text-slate-200">received_at</strong> is set — i.e.

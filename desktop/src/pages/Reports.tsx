@@ -77,7 +77,7 @@ export function Reports(): JSX.Element {
         }
       />
 
-      <div className="glass flex flex-wrap items-end gap-3 p-4">
+      <div className="glass inline-flex w-fit max-w-full flex-wrap items-end gap-3 px-3 py-2">
         <div className="min-w-[200px]">
           <Select
             placeholder="— All stores —"
@@ -180,7 +180,7 @@ export function Reports(): JSX.Element {
                     className="w-full rounded-t-md bg-gradient-to-t from-cobalt-600 to-cobalt-400"
                     style={{ height: `${h}px` }}
                   />
-                  <div className="text-[10px] text-slate-500">{r.day.slice(5)}</div>
+                  <div className="text-xs text-slate-500">{r.day.slice(5)}</div>
                 </div>
               );
             })}

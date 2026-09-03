@@ -81,7 +81,7 @@ export function CustomerDetail(): JSX.Element {
             )}
           </div>
         </div>
-        <ul className="mt-5 grid grid-cols-1 gap-1.5 text-sm md:grid-cols-2">
+        <ul className="mt-5 grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
           {c?.phone && <Row icon={<Phone className="h-3.5 w-3.5" />} value={c.phone} />}
           {c?.email && <Row icon={<Mail className="h-3.5 w-3.5" />} value={c.email} />}
           {c?.gstin && (
@@ -159,7 +159,7 @@ function TimelineRow({ entry }: { entry: TimelineEntry }): JSX.Element {
     <li className="flex items-start gap-4 px-4 py-3">
       <div
         className={cn(
-          'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border',
+          'mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border',
           meta.tone,
         )}
       >
@@ -181,7 +181,7 @@ function TimelineRow({ entry }: { entry: TimelineEntry }): JSX.Element {
             </div>
           )}
         </div>
-        <div className="mt-0.5 text-[10px] uppercase tracking-wider text-slate-500">
+        <div className="mt-1 text-xs uppercase tracking-wider text-slate-500">
           {new Date(entry.at).toLocaleString()}
           {entry.reference && <> · {entry.reference}</>}
         </div>

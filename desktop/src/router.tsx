@@ -35,6 +35,7 @@ import { Billing } from '@/pages/billing/Billing';
 import { OutstandingDues } from '@/pages/billing/OutstandingDues';
 import { DaySessionPage } from '@/pages/pos/DaySession';
 import { Invoice } from '@/pages/pos/Invoice';
+import { SaleReturn } from '@/pages/pos/SaleReturn';
 import { LocalInvoice } from '@/pages/pos/LocalInvoice';
 import { Sales } from '@/pages/pos/Sales';
 import { PurchaseEditor } from '@/pages/purchases/PurchaseEditor';
@@ -78,6 +79,7 @@ export const router = createHashRouter([
           { path: 'billing/outstanding', element: <OutstandingDues /> },
           { path: 'sales', element: <Sales /> },
           { path: 'sales/:id/invoice', element: <Invoice /> },
+          { path: 'sales/:id/return', element: <SaleReturn /> },
           // Offline receipt — reads the durable SQLite sale, no network.
           { path: 'sales/local/:id/invoice', element: <LocalInvoice /> },
           { path: 'system', element: <SystemStatus /> },

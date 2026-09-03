@@ -88,7 +88,7 @@ export function UserMenu(): JSX.Element | null {
           open && 'border-border-strong bg-white/[0.06]',
         )}
       >
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-cobalt-500 to-cobalt-800 text-[10px] font-semibold text-white">
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-cobalt-500 to-cobalt-800 text-xs font-semibold text-white">
           {initials}
         </span>
 
@@ -106,11 +106,11 @@ export function UserMenu(): JSX.Element | null {
               {user.full_name}
             </div>
 
-            <div className="mt-0.5 text-xs text-slate-500">
+            <div className="mt-1 text-xs text-slate-500">
               {user.email}
             </div>
 
-            <div className="mt-2 inline-flex items-center gap-1 rounded-full border border-cobalt-500/30 bg-cobalt-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-cobalt-200">
+            <div className="mt-2 inline-flex items-center gap-1 rounded-full border border-cobalt-500/30 bg-cobalt-500/10 px-2 py-1 text-xs uppercase tracking-wider text-cobalt-200">
               {ROLE_LABEL[user.role]}
             </div>
           </div>

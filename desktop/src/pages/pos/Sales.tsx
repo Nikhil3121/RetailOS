@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Receipt } from 'lucide-react';
+import { ArrowLeft, Receipt, RotateCcw } from 'lucide-react';
 
+import { Button } from '@/components/ui/Button';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Input } from '@/components/ui/Input';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -18,6 +19,18 @@ const STATUS_OPTIONS = [
 ];
 
 export function Sales(): JSX.Element {
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  /**
+   * Arrived here to START A RETURN rather than to browse.
+   *
+   * Billing's transaction-type dropdown sends the cashier here because a return
+   * is always against one specific invoice. Without this flag the screen gave
+   * no hint why it had opened and no way back — which is exactly what happened
+   * the first time it shipped.
+   */
+  const picking = params.get('pick') === 'return';
+
   const [storeId, setStoreId] = useState<string>('');
   const [status, setStatus] = useState<SaleStatus | ''>('');
   const [fromDate, setFromDate] = useState<string>(new Date().toISOString().slice(0, 10));
@@ -63,11 +76,29 @@ export function Sales(): JSX.Element {
       { key: 'lines', header: 'Lines', align: 'right', cell: (s) => <span className="font-mono">{s.line_count}</span> },
       { key: 'total', header: 'Grand total', align: 'right', cell: (s) => <span className="font-mono text-white">₹{s.grand_total}</span> },
       {
+        key: 'return',
+        header: '',
+        align: 'right',
+        // Only a completed SALE can be credited. A voided bill is already
+        // reversed, and a credit note cannot itself be returned.
+        cell: (s) =>
+          s.status === 'completed' ? (
+            <Button
+              size="sm"
+              variant={picking ? 'primary' : 'secondary'}
+              leadingIcon={<RotateCcw className="h-3.5 w-3.5" />}
+              onClick={() => navigate(`/sales/${s.id}/return`)}
+            >
+              Return
+            </Button>
+          ) : null,
+      },
+      {
         key: 'status',
         header: 'Status',
         cell: (s) => (
           <span
-            className={`rounded-full border px-2 py-0.5 text-xs ${
+            className={`rounded-full border px-2 py-1 text-xs ${
               s.status === 'completed'
                 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
                 : 'border-rose-500/30 bg-rose-500/10 text-rose-200'
@@ -78,17 +109,32 @@ export function Sales(): JSX.Element {
         ),
       },
     ],
-    [],
+    [picking, navigate],
   );
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Sales history"
-        description="Every completed and voided sale, with a link to reprint the invoice."
+        title={picking ? 'Choose the bill to return against' : 'Sales history'}
+        description={
+          picking
+            ? 'A return is always credited against one specific invoice. Find it below, then press Return on that row.'
+            : 'Every completed and voided sale, with a link to reprint the invoice.'
+        }
+        actions={
+          // Always offer the way out. Landing here from Billing with no back
+          // button is what stranded the cashier.
+          <Button
+            variant="ghost"
+            leadingIcon={<ArrowLeft className="h-4 w-4" />}
+            onClick={() => navigate('/billing')}
+          >
+            Back to billing
+          </Button>
+        }
       />
 
-      <div className="glass flex flex-wrap items-end gap-3 p-4">
+      <div className="glass inline-flex w-fit max-w-full flex-wrap items-end gap-3 px-3 py-2">
         <div className="min-w-[200px] flex-1">
           <Select
             placeholder="— All stores —"

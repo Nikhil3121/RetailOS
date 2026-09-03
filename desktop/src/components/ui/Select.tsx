@@ -24,11 +24,11 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   const invalid = Boolean(error);
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1">
       {label && (
         <label
           htmlFor={selectId}
-          className="text-xs font-medium uppercase tracking-wider text-slate-400"
+          className="block text-xs font-medium text-slate-400"
         >
           {label}
         </label>
@@ -42,11 +42,11 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         // and the highlighted row is unreadable pale-blue-on-blue.
         style={{ colorScheme: 'dark' }}
         className={cn(
-          'w-full appearance-none rounded-xl border bg-white/[0.02] px-3.5 py-2.5 text-sm text-slate-100',
+          'w-full appearance-none rounded-xl border bg-surface-muted px-4 py-3 text-sm text-slate-100',
           'transition-colors focus:outline-none',
           invalid
             ? 'border-rose-500/50 focus:border-rose-400 focus:ring-1 focus:ring-rose-400/40'
-            : 'border-border focus:border-cobalt-400 focus:ring-1 focus:ring-cobalt-400/40',
+            : 'border-border-strong hover:border-slate-400 focus:border-brand-600 focus:ring-2 focus:ring-brand-600/25',
           className,
         )}
         {...rest}

@@ -296,7 +296,7 @@ export function Inventory(): JSX.Element {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="text-[10px] uppercase tracking-wider text-slate-500">
+              <thead className="text-xs uppercase tracking-wider text-slate-500">
                 <tr className="border-b border-border/60">
                   <th className="px-3 py-2 text-left">Product</th>
                   <th className="px-3 py-2 text-left">SKU · Barcode</th>
@@ -325,14 +325,14 @@ export function Inventory(): JSX.Element {
                           </span>
                           <div>
                             <div className="font-medium text-white">{r.product_name}</div>
-                            <div className="text-[11px] text-slate-500">{r.variant_name}</div>
+                            <div className="text-xs text-slate-500">{r.variant_name}</div>
                           </div>
                         </div>
                       </td>
                       <td className="px-3 py-2">
                         <div className="font-mono text-xs text-slate-300">{r.sku}</div>
                         {r.barcode && (
-                          <div className="font-mono text-[10px] text-slate-500">{r.barcode}</div>
+                          <div className="font-mono text-xs text-slate-500">{r.barcode}</div>
                         )}
                       </td>
                       <td className="px-3 py-2 text-right text-xs text-slate-400">
@@ -354,7 +354,7 @@ export function Inventory(): JSX.Element {
                         {state !== 'ok' && (
                           <div
                             className={cn(
-                              'text-[10px] uppercase tracking-wider',
+                              'text-xs uppercase tracking-wider',
                               state === 'out' ? 'text-rose-400' : 'text-amber-400',
                             )}
                           >
@@ -478,7 +478,7 @@ function SummaryTile({
     <GlassCard className="p-4">
       <div className="flex items-start justify-between">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
             {label}
           </div>
           <div
@@ -696,7 +696,7 @@ function VariantPicker({
         <div className="flex items-center justify-between gap-3 rounded-xl border border-cobalt-500/30 bg-cobalt-500/10 px-3 py-2 text-sm">
           <div>
             <div className="font-medium text-white">{value.product_name}</div>
-            <div className="text-[11px] text-slate-400">
+            <div className="text-xs text-slate-400">
               {value.variant_name} · <span className="font-mono">{value.sku}</span>
               {value.barcode && (
                 <>
@@ -752,7 +752,7 @@ function VariantPicker({
                 >
                   <div>
                     <div className="text-white">{v.product_name}</div>
-                    <div className="text-[11px] text-slate-500">
+                    <div className="text-xs text-slate-500">
                       {v.variant_name} · <span className="font-mono">{v.sku}</span>
                       {v.barcode && (
                         <>
@@ -1032,7 +1032,7 @@ function BulkReceiveModal({
         <VariantPicker value={picker} onSelect={setPicker} />
 
         <div className="rounded-xl border border-border">
-          <div className="border-b border-border/60 px-3 py-2 text-[10px] uppercase tracking-wider text-slate-500">
+          <div className="border-b border-border/60 px-3 py-2 text-xs uppercase tracking-wider text-slate-500">
             Lines ({lines.length})
           </div>
           {lines.length === 0 ? (
@@ -1042,7 +1042,7 @@ function BulkReceiveModal({
           ) : (
             <div className="max-h-72 overflow-y-auto">
               <table className="w-full text-sm">
-                <thead className="text-[10px] uppercase tracking-wider text-slate-500">
+                <thead className="text-xs uppercase tracking-wider text-slate-500">
                   <tr className="border-b border-border/60">
                     <th className="px-3 py-2 text-left">Product</th>
                     <th className="px-3 py-2 text-right">Qty</th>
@@ -1055,7 +1055,7 @@ function BulkReceiveModal({
                     <tr key={l.variant_id} className="border-b border-border/40 last:border-b-0">
                       <td className="px-3 py-2">
                         <div className="text-white">{l.product_name}</div>
-                        <div className="text-[11px] text-slate-500">
+                        <div className="text-xs text-slate-500">
                           {l.variant_name} · <span className="font-mono">{l.sku}</span>
                         </div>
                       </td>
@@ -1430,7 +1430,7 @@ function HistoryDrawer({
         )}
         {query.data && query.data.items.length > 0 && (
           <table className="w-full text-sm">
-            <thead className="text-[10px] uppercase tracking-wider text-slate-500">
+            <thead className="text-xs uppercase tracking-wider text-slate-500">
               <tr className="border-b border-border/60">
                 <th className="px-3 py-2 text-left">When</th>
                 <th className="px-3 py-2 text-left">Kind</th>
@@ -1448,7 +1448,7 @@ function HistoryDrawer({
                       {new Date(m.created_at).toLocaleString()}
                     </td>
                     <td className="px-3 py-2">
-                      <span className="rounded-md border border-border bg-white/[0.03] px-2 py-0.5 text-[10px] uppercase tracking-wider text-slate-300">
+                      <span className="rounded-md border border-border bg-white/[0.03] px-2 py-1 text-xs uppercase tracking-wider text-slate-300">
                         {MOVEMENT_LABEL[m.kind]}
                       </span>
                     </td>

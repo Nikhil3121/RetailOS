@@ -134,7 +134,7 @@ function TreeRow({
           <span className="font-medium text-white">{node.name}</span>
           <span className="font-mono text-xs text-slate-500">{node.slug}</span>
           {!node.is_active && (
-            <span className="rounded-full border border-border bg-white/[0.02] px-2 py-0.5 text-[10px] uppercase tracking-wider text-slate-400">
+            <span className="rounded-full border border-border bg-white/[0.02] px-2 py-1 text-xs uppercase tracking-wider text-slate-400">
               Inactive
             </span>
           )}

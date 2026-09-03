@@ -74,7 +74,7 @@ export function Campaigns(): JSX.Element {
         cell: (r) => (
           <div>
             <div className="text-sm font-medium text-white">{r.title}</div>
-            <div className="text-[11px] text-slate-500">
+            <div className="text-xs text-slate-500">
               {new Date(r.created_at).toLocaleString()}
             </div>
           </div>
@@ -84,7 +84,7 @@ export function Campaigns(): JSX.Element {
         key: 'channel',
         header: 'Channel',
         cell: (r) => (
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-white/[0.03] px-2 py-0.5 text-[11px] uppercase tracking-wider text-slate-300">
+          <span className="inline-flex items-center gap-2 rounded-md border border-border bg-white/[0.03] px-2 py-1 text-xs uppercase tracking-wider text-slate-300">
             {ChannelIcon(r.channel)}
             {CHANNEL_LABEL[r.channel]}
           </span>
@@ -104,7 +104,7 @@ export function Campaigns(): JSX.Element {
             <div className="font-mono text-sm text-slate-100">
               {r.total_recipients}
             </div>
-            <div className="text-[10px] text-slate-500">
+            <div className="text-xs text-slate-500">
               <span className="text-emerald-300">{r.sent_count} sent</span>
               {r.failed_count > 0 && (
                 <>
@@ -197,7 +197,7 @@ function StatusChip({ status }: { status: CampaignSummary['status'] }): JSX.Elem
   return (
     <span
       className={cn(
-        'rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider',
+        'rounded-full border px-2 py-1 text-xs font-medium uppercase tracking-wider',
         cls,
       )}
     >
@@ -221,7 +221,7 @@ function Tile({
     <GlassCard className="p-4">
       <div className="flex items-start justify-between">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
             {label}
           </div>
           <div

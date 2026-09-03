@@ -80,7 +80,7 @@ export function DataTable<T>({
                       <button
                         type="button"
                         onClick={onRetry}
-                        className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-border bg-white/[0.03] px-3 py-1.5 text-xs text-slate-200 hover:bg-white/[0.06]"
+                        className="mt-1 inline-flex items-center gap-2 rounded-lg border border-border bg-white/[0.03] px-3 py-2 text-xs text-slate-200 hover:bg-white/[0.06]"
                       >
                         <RefreshCcw className="h-3.5 w-3.5" /> Retry
                       </button>

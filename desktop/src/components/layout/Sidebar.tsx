@@ -370,7 +370,7 @@ function SidebarGroup({
             open ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0',
           )}
         >
-          <div className="ml-4 space-y-0.5 border-l border-border/40 pl-3 pt-1">
+          <div className="ml-4 space-y-1 border-l border-border/40 pl-3 pt-1">
             {group.items.map((item) => (
               <SidebarLink key={item.to} item={item} collapsed={false} dense />
             ))}
@@ -399,7 +399,10 @@ function SidebarLink({
       className={({ isActive }) =>
         cn(
           'flex items-center gap-3 rounded-lg text-sm transition-colors',
-          dense ? 'px-2.5 py-1.5' : 'px-3 py-2',
+          // Sub-items stay tighter than their parent group, but keep the same
+          // left inset so every label in the tree shares one vertical edge —
+          // alignment reads as order; a staggered indent reads as drift.
+          dense ? 'px-3 py-1' : 'px-3 py-2',
           collapsed && 'justify-center',
           isActive
             ? 'bg-gradient-to-r from-cobalt-800/60 to-cobalt-600/30 text-white shadow-glow'

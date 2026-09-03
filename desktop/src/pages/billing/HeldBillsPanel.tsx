@@ -154,7 +154,7 @@ export function HeldBillsPanel({
           <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
             <p className="text-sm text-slate-300">No held bills.</p>
             <p className="text-xs text-slate-500">
-              Press <kbd className="rounded bg-white/5 px-1.5 py-0.5 text-[10px]">F3</kbd>{' '}
+              Press <kbd className="rounded bg-white/5 px-2 py-1 text-xs">F3</kbd>{' '}
               on the Billing screen to park the current cart.
             </p>
           </div>
@@ -177,7 +177,7 @@ export function HeldBillsPanel({
                           {s.lines.length} item{s.lines.length === 1 ? '' : 's'}
                         </span>
                       </div>
-                      <div className="mt-0.5 text-xs text-slate-400">
+                      <div className="mt-1 text-xs text-slate-400">
                         {relativeTime(s.held_at)}
                         {s.notes ? (
                           <span className="ml-2 truncate italic text-slate-500">
@@ -186,7 +186,7 @@ export function HeldBillsPanel({
                         ) : null}
                       </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
+                    <div className="flex shrink-0 items-center gap-2">
                       <Button
                         size="sm"
                         variant="secondary"

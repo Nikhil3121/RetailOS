@@ -114,7 +114,7 @@ export function ExpenseReports(): JSX.Element {
         description="Revenue minus COGS minus operating expenses. Only APPROVED expenses count."
       />
 
-      <div className="glass flex flex-wrap items-end gap-3 p-4">
+      <div className="glass inline-flex w-fit max-w-full flex-wrap items-end gap-3 px-3 py-2">
         <div className="min-w-[160px]">
           <Input label="From" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
         </div>
@@ -233,7 +233,7 @@ export function ExpenseReports(): JSX.Element {
           <p className="mt-1 text-xs text-slate-500">
             All rupees; positive numbers flow towards profit.
           </p>
-          <dl className="mt-6 space-y-1.5 text-sm">
+          <dl className="mt-6 space-y-2 text-sm">
             <Row label="Revenue" value={pnl ? `₹${pnl.revenue}` : '—'} tone="positive" strong />
             <Row label="Discounts" value={pnl ? `− ₹${pnl.discounts}` : '—'} tone="dim" />
             <Row label="Tax collected" value={pnl ? `₹${pnl.tax_collected}` : '—'} tone="dim" />
@@ -266,7 +266,7 @@ export function ExpenseReports(): JSX.Element {
       </div>
 
       <div className="flex items-start gap-2 rounded-xl border border-border bg-white/[0.02] px-3 py-2 text-xs text-slate-400">
-        <Coins className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
+        <Coins className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-500" />
         <span>
           <strong className="text-slate-300">COGS is estimated</strong> — uses the variant's
           current cost price as a proxy. Set accurate costs and Phase 3 will layer on
@@ -291,7 +291,7 @@ function StatusPill({
       <div>
         <div className="text-xs uppercase tracking-wider text-slate-500">{label}</div>
         <div className="mt-1 font-mono text-2xl font-semibold text-white">{count}</div>
-        {amount && <div className="mt-0.5 text-xs text-slate-400">{amount}</div>}
+        {amount && <div className="mt-1 text-xs text-slate-400">{amount}</div>}
       </div>
       <div className={`h-2 w-2 rounded-full ${tone.split(' ').find((t) => t.startsWith('bg-')) ?? ''}`} />
     </div>

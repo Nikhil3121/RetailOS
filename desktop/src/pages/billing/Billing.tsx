@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
+  Award,
   Banknote,
   CheckCircle2,
   CloudOff,
@@ -15,7 +16,9 @@ import {
   ReceiptText,
   ScanBarcode,
   Smartphone,
+  Store,
   Trash2,
+  Users,
   Wallet,
   Wifi,
   Zap,
@@ -383,6 +386,13 @@ export function Billing(): JSX.Element {
   // Presentation only — the authoritative totals stay in computeTotals.
   const savings = useMemo(() => summariseSavings(lines), [lines]);
 
+  // Presentation only — a units count for the bill header. Fabric sells by
+  // the metre, so this is not always a whole number.
+  const totalUnits = useMemo(
+    () => lines.reduce((sum, l) => sum + l.quantity, 0),
+    [lines],
+  );
+
   const paidNum = Number(amountPaid) || 0;
   const balanceDue = Math.max(round(totals.grand - paidNum), 0);
   const change = Math.max(round(paidNum - totals.grand), 0);
@@ -484,6 +494,15 @@ export function Billing(): JSX.Element {
   }, [debouncedQ, variants]);
 
   useEffect(() => setActiveIdx(0), [debouncedQ]);
+
+  /**
+   * Whether the picker has an actual question to answer.
+   *
+   * `filtered` deliberately falls back to the first 30 catalog rows on an
+   * empty query — that fallback still serves keyboard selection, but it is not
+   * something to put on screen. The bill belongs in that space instead.
+   */
+  const showResults = q.trim().length > 0;
 
   // Scanner UX: track focus so the "Scanner ready" chip goes green, and
   // remember the last item added so we can flash confirmation in the picker.
@@ -633,6 +652,27 @@ export function Billing(): JSX.Element {
   // Save
   // -----------------------------------------------------------------------
   const [error, setError] = useState<string | null>(null);
+  // Context (store / customer / salesperson) is collapsed by default: most
+  // bills are walk-in, no salesperson, at the terminal's own store, and should
+  // cost the cashier zero interaction.
+  const [editingContext, setEditingContext] = useState(false);
+
+  /**
+   * What KIND of transaction this is. Defaults to a plain sale.
+   *
+   * Only `sale` is supported end to end today. The server has no concept of a
+   * transaction type at all — `Sale` carries a status (completed / voided) and
+   * nothing else, `SaleCreate` demands at least one line with quantity > 0, so
+   * a return (negative quantity) is rejected by the schema and an advance (no
+   * goods) cannot even be expressed.
+   *
+   * The selector is here because the counter needs it, but the other three
+   * modes REFUSE TO SAVE rather than writing a sale that lies about what it
+   * is. A return recorded as an ordinary sale would add stock it should
+   * remove and take money it should return.
+   */
+  const [txnType, setTxnType] = useState<TxnType>('sale');
+  const txn = TXN_TYPES.find((t) => t.id === txnType) ?? TXN_TYPES[0];
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmDue, setConfirmDue] = useState(false);
   // Internal id of the locally-committed sale. Survives a network failure,
@@ -920,6 +960,9 @@ export function Billing(): JSX.Element {
     setReference('');
   }
 
+  const storeLabel =
+    storesQuery.data?.items.find((st) => st.id === storeId)?.name ?? 'No store selected';
+
   const busy = save.isPending;
   const customerName = customerId
     ? customersQuery.data?.items.find((c) => c.id === customerId)?.name
@@ -931,7 +974,7 @@ export function Billing(): JSX.Element {
       {flash && (
         <div
           className={cn(
-            'pointer-events-none fixed bottom-6 right-6 z-50 rounded-xl px-4 py-2.5 text-sm font-medium shadow-glass-lg backdrop-blur-xl',
+            'pointer-events-none fixed bottom-6 right-6 z-50 rounded-xl px-4 py-3 text-sm font-medium shadow-glass-lg backdrop-blur-xl',
             flash.kind === 'success'
               ? 'bg-emerald-500/15 text-emerald-200 border border-emerald-400/30'
               : 'bg-white/10 text-slate-200 border border-border',
@@ -944,7 +987,7 @@ export function Billing(): JSX.Element {
       )}
       <PageHeader
         title="Billing"
-        description="Ring up a sale, print a bill, and save any unpaid balance as due — collect it later from Billing → Outstanding. Shortcuts: F2 new · F4 amount · F7 save · F10 print · F3 hold · Shift+F3 resume · F9 today's bills."
+        description="Scan or search to add items, then take payment."
         actions={
           <div className="flex items-center gap-2">
             {/* Held-bills pill: shown whenever there's at least one parked
@@ -954,7 +997,7 @@ export function Billing(): JSX.Element {
               <button
                 type="button"
                 onClick={() => setHeldOpen(true)}
-                className="flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-200 transition hover:border-amber-400/70 hover:bg-amber-500/20"
+                className="flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-200 transition hover:border-amber-400/70 hover:bg-amber-500/20"
                 title="Resume a held bill (Shift+F3)"
               >
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
@@ -980,35 +1023,109 @@ export function Billing(): JSX.Element {
         }
       />
 
-      {/* Store + customer + session bar */}
-      <GlassCard className="p-4">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Select
-            label="Store"
-            placeholder="— Select store —"
-            options={(storesQuery.data?.items ?? []).map((s) => ({
-              label: `${s.code} · ${s.name}`,
-              value: s.id,
-            }))}
-            value={storeId}
-            onChange={(e) => setStoreId(e.target.value)}
-          />
-          <Select
-            label="Customer"
-            placeholder="— Walk-in —"
-            options={(customersQuery.data?.items ?? []).map((c) => ({
-              label: `${c.name}${c.phone ? ` · ${c.phone}` : ''}`,
-              value: c.id,
-            }))}
-            value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
-            hint={
-              isDue && !customerId
-                ? 'Required for due bills'
-                : undefined
-            }
-          />
-          <div className="flex items-end">
+      {/*
+        Terminal context — one line, not two rows of form fields.
+
+        WHY: this block previously carried four controls (store, customer,
+        salesperson code, salesperson) across two rows, consuming ~190px above
+        the fold on a 1366x768 shop monitor and pushing the cart to roughly
+        three visible rows. A six-item bill did not fit on screen.
+
+        THE STORE IS NOT A FORM FIELD. A terminal sits in one shop and never
+        moves, but the two M.S. Mall branches carry DIFFERENT GSTINs and
+        separate invoice series — so a stray click on a dropdown put the wrong
+        tax identity on a legal invoice. It is now read-only context with a
+        deliberate "Change" action behind it.
+
+        Customer and salesperson remain fully available; they are simply
+        collapsed until needed, because most bills are walk-in with no
+        salesperson and should cost zero interaction.
+      */}
+      <GlassCard className="px-4 py-3">
+        {/*
+          Summary and editor are mutually exclusive. Rendering both at once
+          stated the same three facts twice — once as text and again as the
+          form fields holding them.
+        */}
+        {!editingContext && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          {/*
+            Transaction type comes FIRST because it changes what every other
+            control on the screen means. A quantity, a payment and a total all
+            reverse sign between a sale and a return.
+          */}
+          <label className="flex items-center gap-2">
+            <span className="sr-only">Transaction type</span>
+            <select
+              value={txnType}
+              onChange={(e) => {
+                const next = e.target.value as TxnType;
+                const target = TXN_TYPES.find((t) => t.id === next);
+                // Modes that live on another screen navigate instead of
+                // switching this one into a state it cannot serve.
+                if (target?.route) {
+                  navigate(target.route);
+                  return;
+                }
+                setTxnType(next);
+              }}
+              className="rounded-lg border border-border-strong bg-surface-muted px-2 py-1 text-sm font-medium text-white focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/25"
+            >
+              {TXN_TYPES.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <span className="h-4 w-px bg-border" aria-hidden="true" />
+
+          <div className="flex items-center gap-2">
+            <Store className="h-4 w-4 shrink-0 text-slate-500" />
+            <span className="font-medium text-white">{storeLabel}</span>
+            <button
+              type="button"
+              onClick={() => setEditingContext(true)}
+              className="rounded px-2 py-1 text-xs text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
+            >
+              Change
+            </button>
+          </div>
+
+          <span className="h-4 w-px bg-border" aria-hidden="true" />
+
+          <button
+            type="button"
+            onClick={() => setEditingContext(true)}
+            className="flex items-center gap-2 rounded px-1 py-1 text-left hover:text-white"
+          >
+            <Users className="h-4 w-4 shrink-0 text-slate-500" />
+            <span className={customerName ? 'text-white' : 'text-slate-500'}>
+              {customerName ?? 'Walk-in customer'}
+            </span>
+          </button>
+
+          <span className="h-4 w-px bg-border" aria-hidden="true" />
+
+          <button
+            type="button"
+            onClick={() => setEditingContext(true)}
+            className="flex items-center gap-2 rounded px-1 py-1 text-left hover:text-white"
+          >
+            <Award className="h-4 w-4 shrink-0 text-slate-500" />
+            <span className={salespersonName ? 'text-white' : 'text-slate-500'}>
+              {salespersonName ?? 'Credit to cashier'}
+            </span>
+          </button>
+
+          {/*
+            Day-session state sits on the SAME row, pushed right.
+
+            It was on a row of its own, which left a band of dead space either
+            side of it and grew the card for no information gained.
+          */}
+          <div className="ml-auto shrink-0">
             <SessionBanner
               hasStore={!!storeId}
               open={!!sessionOpen}
@@ -1016,52 +1133,115 @@ export function Billing(): JSX.Element {
             />
           </div>
         </div>
+        )}
 
-        {/* Salesperson attribution row — the staff who gets commission +
-            performance credit for this bill. Two ways to pick them:
-             1. Type the STF-#### code into the quick-entry and press Enter
-             2. Choose from the dropdown */}
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Input
-            label="Salesperson code"
-            placeholder="Type STF-0001 · Enter"
-            value={staffCodeBuffer}
-            onChange={(e) => setStaffCodeBuffer(e.target.value)}
-            onKeyDown={onStaffCodeKey}
-            error={staffLookupError ?? undefined}
-          />
-          <Select
-            label="Salesperson"
-            placeholder="— No salesperson (cashier gets credit) —"
-            options={activeStaff.map((u) => ({
-              label: `${u.staff_code ? `${u.staff_code} · ` : ''}${u.full_name}`,
-              value: u.id,
-            }))}
-            value={salespersonId}
-            onChange={(e) => {
-              setSalespersonId(e.target.value);
-              setStaffLookupError(null);
-            }}
-          />
-          <div className="flex items-end">
-            {salespersonName ? (
-              <div className="w-full rounded-xl border border-cobalt-500/30 bg-cobalt-500/10 px-3 py-2 text-xs text-cobalt-100">
-                Commission + performance credit →{' '}
-                <span className="font-semibold">{salespersonName}</span>
-              </div>
-            ) : (
-              <div className="w-full rounded-xl border border-border bg-white/[0.02] px-3 py-2 text-xs text-slate-500">
-                No salesperson picked — the cashier at the register gets credit.
-              </div>
-            )}
+        {editingContext && (
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-medium text-slate-400">Bill context</span>
+            <div className="ml-auto shrink-0">
+              <SessionBanner
+                hasStore={!!storeId}
+                open={!!sessionOpen}
+                loading={sessionLoading}
+              />
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* An unsupported mode says so here, once, instead of failing at save. */}
+        {!txn.ready && txn.needs && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              <b className="font-semibold">{txn.label} is not wired up yet.</b>{' '}
+              {txn.needs} Saving is blocked in this mode — recording it as an
+              ordinary sale would move stock and money the wrong way.
+            </span>
+          </div>
+        )}
+
+        {/* Expanded only when something actually needs changing. */}
+        {editingContext && (
+          <div className="mt-3 grid grid-cols-1 gap-3 border-t border-border pt-3 md:grid-cols-3">
+            <Select
+              label="Store"
+              placeholder="— Select store —"
+              options={(storesQuery.data?.items ?? []).map((st) => ({
+                label: `${st.code} · ${st.name}`,
+                value: st.id,
+              }))}
+              value={storeId}
+              onChange={(e) => setStoreId(e.target.value)}
+              hint="Different branches bill under different GSTINs."
+            />
+            <Select
+              label="Customer"
+              placeholder="— Walk-in —"
+              options={(customersQuery.data?.items ?? []).map((c) => ({
+                label: `${c.name}${c.phone ? ` · ${c.phone}` : ''}`,
+                value: c.id,
+              }))}
+              value={customerId}
+              onChange={(e) => setCustomerId(e.target.value)}
+              hint="Required only when a bill leaves an unpaid balance."
+            />
+            {/*
+              One salesperson control, not two.
+
+              A code input and a dropdown previously sat side by side for the
+              same value. This accepts either: type STF-0001 and press Enter,
+              or pick from the list.
+            */}
+            <div className="space-y-2">
+              <Select
+                label="Salesperson"
+                placeholder="— Credit to cashier —"
+                options={activeStaff.map((u) => ({
+                  label: `${u.staff_code ? `${u.staff_code} · ` : ''}${u.full_name}`,
+                  value: u.id,
+                }))}
+                value={salespersonId}
+                onChange={(e) => {
+                  setSalespersonId(e.target.value);
+                  setStaffLookupError(null);
+                }}
+              />
+              <input
+                type="text"
+                placeholder="…or type STF-0001 and press Enter"
+                value={staffCodeBuffer}
+                onChange={(e) => setStaffCodeBuffer(e.target.value)}
+                onKeyDown={onStaffCodeKey}
+                className="w-full rounded-lg border border-border bg-white/[0.02] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-cobalt-400 focus:outline-none"
+              />
+              {staffLookupError && (
+                <p className="text-xs text-rose-300">{staffLookupError}</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {editingContext && (
+          <div className="mt-3 flex justify-end">
+            <Button size="sm" variant="secondary" onClick={() => setEditingContext(false)}>
+              Done
+            </Button>
+          </div>
+        )}
       </GlassCard>
 
-      {/* Main split */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_420px]">
-        {/* Left — product picker + lines */}
-        <div className="space-y-4">
+      {/*
+        Main split.
+
+        `min-w-0` on both children is load-bearing, not cosmetic. A grid item
+        defaults to `min-width:auto`, so the widest unbreakable thing inside it
+        (a money figure, the payment-method row) sets a floor the column will
+        not go below — the 420px rail then overflowed the viewport and the
+        right edge of every amount was clipped off screen.
+      */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
+        {/* Left — scanner + the bill itself */}
+        <div className="min-w-0 space-y-4">
           <GlassCard
             className={cn(
               'p-4 transition-colors',
@@ -1087,14 +1267,14 @@ export function Billing(): JSX.Element {
                   <div className="text-sm font-semibold uppercase tracking-wider text-white">
                     Scan barcode
                   </div>
-                  <div className="text-[11px] text-slate-500">
+                  <div className="text-xs text-slate-500">
                     Or type SKU / product name and press Enter
                   </div>
                 </div>
               </div>
               <span
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider transition-colors',
+                  'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-wider transition-colors',
                   scannerFocused
                     ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
                     : 'border-border bg-white/[0.02] text-slate-500',
@@ -1117,29 +1297,65 @@ export function Billing(): JSX.Element {
               autoComplete="off"
               autoFocus
               className={cn(
-                'w-full rounded-xl border bg-white/[0.02] px-4 py-3 font-mono text-base text-slate-100 placeholder:text-slate-500',
+                // 56px tall, 17px type, a permanent 2px brand edge. This is
+                // the single most-used control on the screen and it was the
+                // same size as every other input.
+                'w-full rounded-lg border-2 bg-white/[0.02] px-4 h-14 font-mono text-item text-slate-100 placeholder:text-slate-500',
                 'transition-colors focus:outline-none',
                 scannerFocused
-                  ? 'border-cobalt-400 ring-2 ring-cobalt-400/40'
-                  : 'border-border',
+                  ? 'border-cobalt-400 ring-2 ring-cobalt-400/25'
+                  : 'border-cobalt-500/40',
               )}
             />
 
             {/* Just-added flash so a scan visibly confirms even when the row
                 scrolls out of view. */}
             {lastAddedSku && (
-              <div className="mt-2 flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-100">
+              <div className="mt-2 flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 Added <span className="font-mono">{lastAddedSku}</span> to bill
               </div>
             )}
 
-            {/* Loading / error / empty states — used to be a single ambiguous
-                "No active products". Now the operator can tell load failed
-                from genuinely empty and can retry without a page reload. */}
-            {summariesQuery.isLoading || variantsQuery.isLoading ? (
+            {/*
+              A catalog that failed to load is always worth saying, searching
+              or not — nothing can be scanned until it is fixed.
+            */}
+            {(summariesQuery.isError || variantsQuery.isError) && !showResults && (
+              <div className="mt-3 flex items-center justify-between rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+                <span>Catalog failed to load — scanning will not match.</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  leadingIcon={<RefreshCw className="h-3.5 w-3.5" />}
+                  onClick={() => {
+                    void summariesQuery.refetch();
+                    void variantsQuery.refetch();
+                  }}
+                >
+                  Retry
+                </Button>
+              </div>
+            )}
+
+            {/*
+              Search results — rendered ONLY while something is typed.
+
+              This block used to be permanent. With an empty query `filtered`
+              falls back to `variants.slice(0, 30)` (see the memo above): the
+              first thirty rows of the catalog in arbitrary order — not recent,
+              not popular, not this shop's fast movers. It told the cashier
+              nothing, and at ~288px tall it pushed the actual bill below the
+              fold on a 1366x768 counter monitor, which is why the cart was
+              never on screen.
+
+              Nothing is deleted. The same list, the same keyboard navigation,
+              the same click-to-add — it simply stops occupying the screen when
+              there is no query to answer.
+            */}
+            {showResults && (summariesQuery.isLoading || variantsQuery.isLoading) ? (
               <div className="mt-4 text-sm text-slate-400">Loading catalog…</div>
-            ) : summariesQuery.isError || variantsQuery.isError ? (
+            ) : showResults && (summariesQuery.isError || variantsQuery.isError) ? (
               <div className="mt-4 flex items-center justify-between rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
                 <span>
                   Failed to load the catalog.{' '}
@@ -1162,14 +1378,14 @@ export function Billing(): JSX.Element {
                   Retry
                 </Button>
               </div>
-            ) : filtered.length > 0 ? (
-              <ul className="mt-4 max-h-72 overflow-y-auto rounded-xl border border-border">
+            ) : showResults && filtered.length > 0 ? (
+              <ul className="mt-3 max-h-[19rem] overflow-y-auto rounded-xl border border-border">
                 {filtered.map((v, idx) => (
                   <li
                     key={v.variant_id}
                     onClick={() => addVariant(v)}
                     className={cn(
-                      'flex cursor-pointer items-center justify-between border-b border-border/60 px-4 py-2.5 last:border-b-0 hover:bg-white/[0.03]',
+                      'flex cursor-pointer items-center justify-between border-b border-border/60 px-4 py-3 last:border-b-0 hover:bg-white/[0.03]',
                       idx === activeIdx && 'bg-cobalt-500/10',
                       lastAddedSku === v.sku && 'bg-emerald-500/10',
                     )}
@@ -1195,14 +1411,12 @@ export function Billing(): JSX.Element {
                   </li>
                 ))}
               </ul>
-            ) : (
-              <div className="mt-4 flex flex-col items-center gap-2 rounded-xl border border-border px-4 py-6 text-center text-sm text-slate-400">
+            ) : showResults ? (
+              <div className="mt-3 flex flex-col items-center gap-2 rounded-xl border border-border px-4 py-6 text-center text-sm text-slate-400">
                 <span>
-                  {q
-                    ? 'No product matches that search.'
-                    : variants.length === 0
-                      ? 'No active products in the catalog. Add one from Catalog → Products, or activate an existing product.'
-                      : 'No product matches that filter.'}
+                  {variants.length === 0
+                    ? 'No active products in the catalog. Add one from Catalog → Products, or activate an existing product.'
+                    : `Nothing matches “${q}”.`}
                 </span>
                 <Button
                   size="sm"
@@ -1216,22 +1430,40 @@ export function Billing(): JSX.Element {
                   Refresh catalog
                 </Button>
               </div>
-            )}
+            ) : null}
           </GlassCard>
 
           <GlassCard className="p-0">
-            <div className="border-b border-border/60 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Bill items ({lines.length})
+            <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Bill items ({lines.length})
+              </span>
+              {lines.length > 0 && (
+                <span className="money text-xs text-slate-500">
+                  {totalUnits.toFixed(totalUnits % 1 === 0 ? 0 : 2)} units
+                </span>
+              )}
             </div>
 
             {lines.length === 0 ? (
-              <div className="px-4 py-10 text-center text-sm text-slate-500">
-                No items yet. Scan or search a product above to start the bill.
+              /*
+                An empty bill is the resting state of this screen, not an
+                error. It points at the one thing to do next rather than
+                reporting that nothing has happened.
+              */
+              <div className="flex flex-col items-center gap-2 px-4 py-14 text-center">
+                <ScanBarcode className="h-7 w-7 text-slate-600" />
+                <div className="text-sm font-medium text-slate-300">
+                  Scan a barcode to start the bill
+                </div>
+                <div className="text-xs text-slate-500">
+                  Or type a SKU or product name in the box above and press Enter.
+                </div>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="text-[10px] uppercase tracking-wider text-slate-500">
+                  <thead className="text-xs uppercase tracking-wider text-slate-500">
                     <tr className="border-b border-border/60">
                       <th className="px-3 py-2 text-left">Item</th>
                       <th className="px-3 py-2 text-right">Qty</th>
@@ -1243,7 +1475,16 @@ export function Billing(): JSX.Element {
                     </tr>
                   </thead>
                   <tbody>
-                    {lines.map((l) => {
+                    {/*
+                      Newest line first — DISPLAY ORDER ONLY.
+
+                      `lines` itself is untouched and still goes to the server
+                      in entry order; this reverses a copy. After a scan the
+                      cashier checks exactly one thing — did the right item go
+                      in? — and on a long bill the answer was at the bottom,
+                      out of view.
+                    */}
+                    {[...lines].reverse().map((l) => {
                       // Tax-inclusive: the "total" column is the
                       // post-discount extended price — GST is already
                       // embedded in unit_price and shown separately in
@@ -1263,7 +1504,7 @@ export function Billing(): JSX.Element {
                             <div className="font-medium text-white">
                               {l.product_name}
                             </div>
-                            <div className="text-[11px] text-slate-500">
+                            <div className="text-xs text-slate-500">
                               {l.variant_name} ·{' '}
                               <span className="font-mono">{l.sku}</span>
                             </div>
@@ -1273,7 +1514,7 @@ export function Billing(): JSX.Element {
                                 noise, and a line sold above MRP is not a
                                 discount. */}
                             {presented.showsSaving && (
-                              <div className="mt-0.5 text-[11px]">
+                              <div className="mt-1 text-xs">
                                 <span className="text-slate-500 line-through">
                                   MRP ₹{(presented.mrpTotal ?? 0).toFixed(2)}
                                 </span>
@@ -1328,8 +1569,10 @@ export function Billing(): JSX.Element {
                           <td className="px-3 py-2 text-right font-mono text-xs text-slate-400">
                             {l.tax_rate}%
                           </td>
-                          <td className="px-3 py-2 text-right font-mono text-slate-100">
-                            ₹{total.toFixed(2)}
+                          <td className="px-3 py-2 text-right">
+                            <span className="money text-base font-semibold text-white">
+                              ₹{total.toFixed(2)}
+                            </span>
                           </td>
                           <td className="px-3 py-2 text-right">
                             <button
@@ -1352,7 +1595,7 @@ export function Billing(): JSX.Element {
         </div>
 
         {/* Right — payment + save */}
-        <GlassCard className="sticky top-4 h-fit p-4">
+        <GlassCard className="sticky top-4 h-fit min-w-0 p-4">
           <dl className="space-y-1 rounded-xl border border-border bg-white/[0.02] p-3 text-sm">
             <Row label="Subtotal" value={`₹${totals.subtotal.toFixed(2)}`} />
             {totals.discount > 0 && (
@@ -1363,18 +1606,30 @@ export function Billing(): JSX.Element {
               />
             )}
             <Row label="Tax (GST)" value={`₹${totals.tax.toFixed(2)}`} tone="dim" />
-            <div className="my-1 border-t border-border/60" />
-            <Row
-              label="Grand total"
-              value={`₹${totals.grand.toFixed(2)}`}
-              strong
-            />
+            {/*
+              One number dominates.
+
+              Subtotal, discount and GST must be present on a tax invoice but
+              nobody reads them aloud; the payable is the only figure the
+              cashier says to the customer and the only one they must not
+              misread. It was previously set at the same weight as the three
+              lines above it.
+            */}
+            <div className="mt-2 flex items-baseline justify-between gap-3 border-t border-border pt-3">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Total payable
+              </span>
+              <span className="money text-total font-semibold leading-none text-white">
+                <span className="text-xl text-slate-500">₹</span>
+                {totals.grand.toFixed(2)}
+              </span>
+            </div>
             {/* What the customer saved against the printed MRP. Shown only
                 when at least one line has an MRP — a confident "You saved
                 Rs.0.00" on a cart with no MRP data would be misleading. */}
             {savings.known && savings.totalSaved > 0 && (
               <div className="mt-1 flex items-center justify-between rounded-lg bg-emerald-500/10 px-2 py-1">
-                <span className="text-[11px] font-medium text-emerald-300">
+                <span className="text-xs font-medium text-emerald-300">
                   You saved
                 </span>
                 <span className="font-mono text-sm font-semibold text-emerald-300">
@@ -1386,7 +1641,7 @@ export function Billing(): JSX.Element {
 
           {/* Payment method */}
           <div className="mt-4">
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
               Payment method
             </div>
             <div className="grid grid-cols-4 gap-2">
@@ -1424,7 +1679,7 @@ export function Billing(): JSX.Element {
               value={amountPaid}
               onChange={(e) => setAmountPaid(e.target.value)}
             />
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <div className="mt-2 flex flex-wrap gap-2">
               <QuickChip
                 onClick={() => setAmountPaid(totals.grand.toFixed(2))}
                 label="Full"
@@ -1523,11 +1778,23 @@ export function Billing(): JSX.Element {
               size="lg"
               className="w-full"
               loading={busy}
-              disabled={busy || lines.length === 0}
+              // Blocked outside `sale`. The server cannot represent the other
+              // three, so the only alternative to disabling this is writing a
+              // sale that misstates what happened.
+              disabled={busy || lines.length === 0 || !txn.ready}
               leadingIcon={<ReceiptText className="h-4 w-4" />}
               onClick={requestSave}
             >
+              {/*
+                The shortcut rides on the control it triggers.
+
+                A permanent line of "F2 new · F4 amount · F7 save…" at the top
+                of the page is read once and then costs vertical space every
+                shift after that. On the button, the shortcut is learned by
+                using the software.
+              */}
               {isDue ? 'Save bill (with due)' : 'Save & print bill'}
+              <Kbd>F10</Kbd>
             </Button>
             {/* Clearing is the only irreversible thing a cashier can do to a
                 cart, and previously the only way to undo a mis-scan was to
@@ -1542,6 +1809,14 @@ export function Billing(): JSX.Element {
             >
               Clear bill
             </Button>
+            {/* The remaining shortcuts, once, small, at the foot of the rail —
+                where they cost nothing above the fold. */}
+            <p className="pt-1 text-center text-xs text-slate-500">
+              <span className="money">F2</span> new ·{' '}
+              <span className="money">F3</span> hold ·{' '}
+              <span className="money">F4</span> amount ·{' '}
+              <span className="money">F9</span> today's bills
+            </p>
           </div>
         </GlassCard>
       </div>
@@ -1594,14 +1869,14 @@ function SessionBanner({
 }): JSX.Element {
   if (!hasStore) {
     return (
-      <div className="w-full rounded-xl border border-border bg-white/[0.02] px-3 py-2 text-xs text-slate-500">
+      <div className="whitespace-nowrap rounded-xl border border-border bg-white/[0.02] px-3 py-2 text-xs text-slate-500">
         Select a store to begin.
       </div>
     );
   }
   if (loading) {
     return (
-      <div className="w-full rounded-xl border border-border bg-white/[0.02] px-3 py-2 text-xs text-slate-500">
+      <div className="whitespace-nowrap rounded-xl border border-border bg-white/[0.02] px-3 py-2 text-xs text-slate-500">
         Checking day session…
       </div>
     );
@@ -1610,7 +1885,7 @@ function SessionBanner({
     return (
       <a
         href="#/day-session"
-        className="flex w-full items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200 hover:bg-amber-500/15"
+        className="flex items-center gap-3 whitespace-nowrap rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200 hover:bg-amber-500/15"
       >
         <span className="flex items-center gap-2">
           <AlertCircle className="h-4 w-4" />
@@ -1623,12 +1898,73 @@ function SessionBanner({
     );
   }
   return (
-    <div className="flex w-full items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+    <div className="flex items-center gap-2 whitespace-nowrap rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
       <DoorOpen className="h-4 w-4" />
-      Day session is open — billing is live.
+      Day session open
     </div>
   );
 }
+
+/** A keycap, sized to sit inside a button without changing its height. */
+function Kbd({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <span className="ml-2 rounded border border-current/40 px-2 py-1 text-xs font-medium opacity-70">
+      {children}
+    </span>
+  );
+}
+
+/**
+ * The four things a counter can record.
+ *
+ * `needs` names the server work each one is missing, so the gap is stated in
+ * the code rather than discovered when a shopkeeper records a return and the
+ * stock goes the wrong way.
+ */
+type TxnType = 'sale' | 'return' | 'advance_received' | 'advance_return';
+
+const TXN_TYPES: {
+  id: TxnType;
+  label: string;
+  hint: string;
+  ready: boolean;
+  /** Where this mode actually happens, when it is not the cart. */
+  route?: string;
+  needs?: string;
+}[] = [
+  {
+    id: 'sale',
+    label: 'Sale',
+    hint: 'Goods out, money in.',
+    ready: true,
+  },
+  {
+    id: 'return',
+    label: 'Return',
+    hint: 'Goods back, money out.',
+    ready: true,
+    // A return is always against ONE invoice, so it cannot be rung up in a
+    // cart — the cashier picks the bill first. Selecting this mode routes
+    // there rather than trying to make one screen do two opposite jobs.
+    route: '/sales?pick=return',
+  },
+  {
+    id: 'advance_received',
+    label: 'Advance received',
+    hint: 'Money in, no goods yet.',
+    ready: false,
+    needs:
+      'An advance is money held against no invoice. The server requires at least one line on every sale, so there is currently no way to store one.',
+  },
+  {
+    id: 'advance_return',
+    label: 'Advance returned',
+    hint: 'Refunding a held advance.',
+    ready: false,
+    needs:
+      'Depends on advances existing first, plus a link back to the advance being refunded so the customer ledger stays balanced.',
+  },
+];
 
 function QtyStepper({
   value,
@@ -1684,7 +2020,7 @@ function QuickChip({
     <button
       type="button"
       onClick={onClick}
-      className={cn('rounded-md border px-2.5 py-1 text-xs font-medium', cls)}
+      className={cn('rounded-md border px-3 py-1 text-xs font-medium', cls)}
     >
       {label}
     </button>
@@ -1705,14 +2041,22 @@ function Row({
   const toneClass = tone === 'dim' ? 'text-slate-400' : 'text-slate-200';
   return (
     <div className="flex items-center justify-between">
-      <dt className={strong ? 'font-medium text-slate-200' : 'text-slate-400'}>
+      <dt
+        className={
+          strong
+            ? 'text-xs font-medium uppercase tracking-wide text-slate-400'
+            : 'text-slate-400'
+        }
+      >
         {label}
       </dt>
       <dd
         className={cn(
-          'font-mono',
+          'font-mono money',
           toneClass,
-          strong && 'text-base font-semibold text-white',
+          // The grand total is the number both the cashier and the customer
+          // look at. At 34px it can be read across the counter.
+          strong && 'text-total font-bold leading-none text-white',
         )}
       >
         {value}

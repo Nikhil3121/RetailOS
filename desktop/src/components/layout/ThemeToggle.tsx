@@ -5,9 +5,12 @@ import { Moon, Sun } from 'lucide-react';
  * Titlebar toggle that flips the app between the dark default and a light
  * preview. Preference is persisted in localStorage so it survives reloads.
  *
- * The switch works by setting `data-theme="light"` on the root <html> element.
- * All light-mode visuals come from scoped overrides in `styles/index.css` that
- * activate under that selector — this component only owns the state.
+ * LIGHT IS THE DEFAULT. A shop floor is bright: dark surfaces catch glare and
+ * translucency lowers contrast exactly where money is displayed. Dark stays a
+ * deliberate choice for evening use.
+ *
+ * The switch sets `data-theme="dark"` on <html>; both palettes are token sets
+ * in styles/index.css, so this component only owns the state.
  */
 
 type Theme = 'dark' | 'light';
@@ -15,15 +18,15 @@ type Theme = 'dark' | 'light';
 const STORAGE_KEY = 'retailos.theme';
 
 function readInitialTheme(): Theme {
-  if (typeof window === 'undefined') return 'dark';
+  if (typeof window === 'undefined') return 'light';
   const stored = window.localStorage.getItem(STORAGE_KEY);
-  return stored === 'light' ? 'light' : 'dark';
+  return stored === 'dark' ? 'dark' : 'light';
 }
 
 function applyTheme(theme: Theme): void {
   const root = document.documentElement;
-  if (theme === 'light') {
-    root.setAttribute('data-theme', 'light');
+  if (theme === 'dark') {
+    root.setAttribute('data-theme', 'dark');
   } else {
     root.removeAttribute('data-theme');
   }

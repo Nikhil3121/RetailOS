@@ -31,13 +31,19 @@ from app.db.models.product import Product, ProductVariant
 from app.db.models.sale import (
     PaymentMethod,
     Sale,
+    SaleDocType,
     SaleLine,
     SaleNumberSequence,
     SalePayment,
     SaleStatus,
 )
 from app.db.models.store import Store
-from app.schemas.sale import SaleCreate, SaleSummary
+from app.schemas.sale import (
+    SaleCreate,
+    SaleLineReturnable,
+    SaleReturnCreate,
+    SaleSummary,
+)
 from app.services.audit import AuditService
 from app.services.day_session import DaySessionService
 from app.services.inventory import InventoryService
@@ -747,9 +753,299 @@ class SaleService:
         return sale
 
     # ------------------------------------------------------------------
+    # Returns / credit notes
+    # ------------------------------------------------------------------
+    async def returnable_lines(self, sale_id: uuid.UUID) -> list[SaleLineReturnable]:
+        """How much of each line on this invoice can still be credited.
+
+        Drives the return screen: a cashier picks from what is actually left,
+        rather than typing a quantity that is rejected on save.
+        """
+        sale = await self.get(sale_id)
+        already = await self._returned_quantities(sale_id)
+        out: list[SaleLineReturnable] = []
+        for line in sorted(sale.lines, key=lambda l: l.sort_order):
+            done = already.get(line.id, _ZERO)
+            out.append(
+                SaleLineReturnable(
+                    sale_line_id=line.id,
+                    variant_id=line.variant_id,
+                    product_name=line.product_name,
+                    variant_name=line.variant_name,
+                    sku=line.sku,
+                    unit_price=line.unit_price,
+                    sold_quantity=line.quantity,
+                    returned_quantity=done,
+                    returnable_quantity=line.quantity - done,
+                )
+            )
+        return out
+
+    async def create_return(
+        self,
+        original_sale_id: uuid.UUID,
+        payload: SaleReturnCreate,
+        *,
+        user_id: uuid.UUID | None,
+    ) -> Sale:
+        """Credit part or all of an invoice.
+
+        The credit note is a `sales` row with doc_type=RETURN and NEGATIVE money,
+        so every existing aggregate nets it out without modification. See
+        migration 0016 for why the sign lives in storage.
+
+        NOTHING about price, discount or tax is taken from the caller. Every
+        figure is copied from the original line and scaled by the returned
+        quantity, so a credit note cannot disagree with the invoice it reverses.
+        """
+        original = await self.get(original_sale_id)
+
+        if original.doc_type is SaleDocType.RETURN:
+            raise ValidationError(
+                "A credit note cannot itself be returned.",
+                code="RETURN_OF_RETURN",
+            )
+        if original.status is SaleStatus.VOIDED:
+            raise ValidationError(
+                "This bill was voided — its stock and money are already reversed.",
+                code="RETURN_OF_VOIDED_SALE",
+            )
+
+        # ---- how much is genuinely left to credit --------------------------
+        by_id = {line.id: line for line in original.lines}
+        already = await self._returned_quantities(original_sale_id)
+
+        requested: dict[uuid.UUID, Decimal] = {}
+        for item in payload.lines:
+            line = by_id.get(item.sale_line_id)
+            if line is None:
+                raise ValidationError(
+                    "That line is not on this bill.",
+                    code="RETURN_LINE_NOT_ON_SALE",
+                )
+            # Two entries for the same line must be summed before the cap is
+            # checked, or a caller can split one over-return across rows.
+            requested[line.id] = requested.get(line.id, _ZERO) + item.quantity
+
+        for line_id, qty in requested.items():
+            line = by_id[line_id]
+            remaining = line.quantity - already.get(line_id, _ZERO)
+            if qty > remaining:
+                raise ValidationError(
+                    f"Only {remaining} of {line.product_name} can still be returned "
+                    f"({line.quantity} sold, {already.get(line_id, _ZERO)} already credited).",
+                    code="RETURN_QUANTITY_EXCEEDS_SOLD",
+                )
+
+        # ---- attribution: same rules as a sale ------------------------------
+        store = await self.db.get(Store, original.store_id)
+        if store is None:
+            raise NotFoundError("Store not found.", code="STORE_NOT_FOUND")
+
+        session, restating = await self._resolve_session_for(
+            store_id=original.store_id, day_session_id=payload.day_session_id
+        )
+
+        occurred_at = payload.occurred_at or datetime.now(timezone.utc)
+
+        # ---- build the negative lines ---------------------------------------
+        lines: list[SaleLine] = []
+        subtotal_net = _ZERO
+        discount_total = _ZERO
+        tax_total = _ZERO
+
+        for idx, (line_id, qty) in enumerate(requested.items()):
+            src = by_id[line_id]
+            # Scale each stored figure by the proportion coming back. Copying
+            # and scaling — rather than recomputing from unit_price — is what
+            # guarantees a full return sums to exactly the original amounts,
+            # including whatever rounding the original line carried.
+            share = qty / src.quantity
+            net = _round(src.subtotal * share)
+            tax = _round(src.tax_amount * share)
+            disc = _round(src.discount_amount * share)
+            total = _round(src.line_total * share)
+
+            lines.append(
+                SaleLine(
+                    variant_id=src.variant_id,
+                    product_name=src.product_name,
+                    variant_name=src.variant_name,
+                    sku=src.sku,
+                    hsn_code=src.hsn_code,
+                    quantity=-qty,
+                    unit_price=src.unit_price,
+                    discount_pct=src.discount_pct,
+                    discount_amount=-disc,
+                    tax_rate=src.tax_rate,
+                    subtotal=-net,
+                    tax_amount=-tax,
+                    line_total=-total,
+                    sort_order=idx,
+                )
+            )
+            subtotal_net += net
+            discount_total += disc
+            tax_total += tax
+
+        grand_total = _round(subtotal_net + tax_total)
+        refunded = _round(sum((r.amount for r in payload.refunds), start=_ZERO))
+        if refunded > grand_total:
+            raise ValidationError(
+                f"Refund of {refunded} exceeds the credit note value of {grand_total}.",
+                code="REFUND_EXCEEDS_CREDIT",
+            )
+
+        number = await self._assign_number(
+            store, occurred_at, doc_type=SaleDocType.RETURN
+        )
+
+        credit = Sale(
+            number=number,
+            client_uuid=payload.client_uuid,
+            occurred_at=occurred_at,
+            terminal_uuid=payload.terminal_uuid,
+            store_id=original.store_id,
+            day_session_id=session.id,
+            customer_id=original.customer_id,
+            status=SaleStatus.COMPLETED,
+            doc_type=SaleDocType.RETURN,
+            original_sale_id=original.id,
+            subtotal=-subtotal_net,
+            discount_total=-discount_total,
+            tax_total=-tax_total,
+            grand_total=-grand_total,
+            # Money handed back is negative for the same reason the totals are:
+            # the shift's expected cash must fall by exactly this amount.
+            paid_total=-refunded,
+            change_due=_ZERO,
+            balance_due=-_round(grand_total - refunded),
+            notes=payload.notes,
+            completed_at=datetime.now(timezone.utc),
+            created_by_user_id=user_id,
+            salesperson_user_id=original.salesperson_user_id,
+        )
+        credit.lines = lines
+        credit.payments = [
+            SalePayment(method=r.method, amount=-r.amount, reference=r.reference)
+            for r in payload.refunds
+        ]
+        self.db.add(credit)
+        await self.db.flush()
+
+        # ---- stock comes back ------------------------------------------------
+        inventory = InventoryService(self.db)
+        for line_id, qty in requested.items():
+            src = by_id[line_id]
+            await inventory.post_movement(
+                variant_id=src.variant_id,
+                store_id=original.store_id,
+                delta=qty,  # positive — the goods are physically back
+                kind=MovementKind.SALE_RETURN,
+                reference_type="sale_return",
+                reference_id=credit.id,
+                reason=f"Return against {original.number}: {payload.reason}",
+                created_by_user_id=user_id,
+                allow_negative=True,
+            )
+
+        # Logged against the ORIGINAL invoice: the question a person asks later
+        # is "what happened to bill INV-…-0041", not "what is credit note 7".
+        await AuditService(self.db).log(
+            action="sale.returned",
+            summary=(
+                f"Credit note {number} against {original.number} "
+                f"(₹{grand_total}): {payload.reason}"
+            ),
+            entity_type="sale",
+            entity_id=original.id,
+            changes={
+                "credit_note": number,
+                "credit_note_id": str(credit.id),
+                "reason": payload.reason,
+                "credit_value": str(grand_total),
+                "refunded": str(refunded),
+            },
+        )
+
+        if restating:
+            await self._restate_closed_session(
+                session=session, sale_id=credit.id, user_id=user_id
+            )
+
+        return await self.get(credit.id)
+
+    async def _returned_quantities(
+        self, sale_id: uuid.UUID
+    ) -> dict[uuid.UUID, Decimal]:
+        """Units already credited per original line, as POSITIVE numbers.
+
+        Credit-note lines carry negative quantity and do not reference the
+        original line directly, so they are matched on variant within the credit
+        notes that point at this invoice. Voided credit notes are excluded —
+        voiding one puts the goods back on sale, which makes them returnable
+        again.
+        """
+        rows = await self.db.execute(
+            select(SaleLine.variant_id, func.sum(SaleLine.quantity))
+            .join(Sale, Sale.id == SaleLine.sale_id)
+            .where(
+                Sale.original_sale_id == sale_id,
+                Sale.doc_type == SaleDocType.RETURN,
+                Sale.status == SaleStatus.COMPLETED,
+            )
+            .group_by(SaleLine.variant_id)
+        )
+        by_variant = {vid: -Decimal(str(total)) for vid, total in rows.all()}
+        if not by_variant:
+            return {}
+
+        original = await self.get(sale_id)
+        out: dict[uuid.UUID, Decimal] = {}
+        for line in sorted(original.lines, key=lambda l: l.sort_order):
+            avail = by_variant.get(line.variant_id, _ZERO)
+            if avail <= _ZERO:
+                continue
+            take = min(avail, line.quantity)
+            out[line.id] = take
+            by_variant[line.variant_id] = avail - take
+        return out
+
+    async def _resolve_session_for(
+        self, *, store_id: uuid.UUID, day_session_id: uuid.UUID | None
+    ) -> tuple[DaySession, bool]:
+        """The shift a document belongs to, and whether it is already closed."""
+        if day_session_id is not None:
+            session = await self.db.get(DaySession, day_session_id)
+            if session is None:
+                raise NotFoundError(
+                    "Day session not found.", code="DAY_SESSION_NOT_FOUND"
+                )
+            if session.store_id != store_id:
+                raise ValidationError(
+                    "That day session belongs to a different store.",
+                    code="DAY_SESSION_STORE_MISMATCH",
+                )
+            return session, session.status is not DayStatus.OPEN
+
+        session = await DaySessionService(self.db).get_open_for_store(store_id)
+        if session is None:
+            raise ValidationError(
+                "No open day session for this store. Open one before recording a return.",
+                code="NO_OPEN_DAY_SESSION",
+            )
+        return session, False
+
+    # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-    async def _assign_number(self, store: Store, effective_at: datetime) -> str:
+    async def _assign_number(
+        self,
+        store: Store,
+        effective_at: datetime,
+        *,
+        doc_type: SaleDocType = SaleDocType.SALE,
+    ) -> str:
         """Bump the per-(store, month) counter and format INV-CODE-YYYYMM-NNNN.
 
         The month comes from WHEN THE SALE HAPPENED, not from when it reached
@@ -768,6 +1064,7 @@ class SaleService:
             .where(
                 SaleNumberSequence.store_id == store.id,
                 SaleNumberSequence.year_month == year_month,
+                SaleNumberSequence.doc_type == doc_type.value,
             )
             .with_for_update()
         )
@@ -779,7 +1076,10 @@ class SaleService:
                 async with self.db.begin_nested():
                     self.db.add(
                         SaleNumberSequence(
-                            store_id=store.id, year_month=year_month, next_seq=1
+                            store_id=store.id,
+                            year_month=year_month,
+                            doc_type=doc_type.value,
+                            next_seq=1,
                         )
                     )
             except IntegrityError:
@@ -789,6 +1089,7 @@ class SaleService:
                 .where(
                     SaleNumberSequence.store_id == store.id,
                     SaleNumberSequence.year_month == year_month,
+                    SaleNumberSequence.doc_type == doc_type.value,
                 )
                 .with_for_update()
             )
@@ -796,4 +1097,7 @@ class SaleService:
         seq = row.next_seq
         row.next_seq = seq + 1
         await self.db.flush()
-        return f"INV-{store.code}-{year_month}-{seq:04d}"
+        # GST requires credit notes to carry their own serial series, separate
+        # from tax invoices — hence a distinct prefix AND a distinct counter.
+        prefix = "CRN" if doc_type is SaleDocType.RETURN else "INV"
+        return f"{prefix}-{store.code}-{year_month}-{seq:04d}"

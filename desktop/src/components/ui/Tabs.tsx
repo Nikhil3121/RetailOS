@@ -29,7 +29,7 @@ export function Tabs({ items, activeId, onChange }: TabsProps): JSX.Element {
             type="button"
             onClick={() => onChange(item.id)}
             className={cn(
-              'relative px-4 py-2.5 text-sm font-medium transition-colors',
+              'relative px-4 py-3 text-sm font-medium transition-colors',
               active ? 'text-white' : 'text-slate-400 hover:text-slate-200',
             )}
           >
@@ -38,7 +38,7 @@ export function Tabs({ items, activeId, onChange }: TabsProps): JSX.Element {
               {typeof item.count === 'number' && (
                 <span
                   className={cn(
-                    'rounded-full border px-1.5 py-0.5 text-[10px] font-normal',
+                    'rounded-full border px-2 py-1 text-xs font-normal',
                     active
                       ? 'border-cobalt-500/40 bg-cobalt-500/10 text-cobalt-200'
                       : 'border-border bg-white/[0.02] text-slate-400',

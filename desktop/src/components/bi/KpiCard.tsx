@@ -109,7 +109,7 @@ function DeltaChip({
 }): JSX.Element {
   if (pct === null) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-border bg-white/[0.02] px-2 py-0.5 text-[10px] text-slate-500">
+      <span className="inline-flex items-center gap-1 rounded-full border border-border bg-white/[0.02] px-2 py-1 text-xs text-slate-500">
         <Minus className="h-3 w-3" /> vs prior
       </span>
     );
@@ -122,7 +122,7 @@ function DeltaChip({
       : 'border-border bg-white/[0.02] text-slate-400';
   const sign = pct > 0 ? '+' : '';
   return (
-    <span className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]', tone)}>
+    <span className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs', tone)}>
       <Icon className="h-3 w-3" />
       {sign}{pct.toFixed(1)}% vs prior
     </span>
