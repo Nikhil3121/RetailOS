@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import uuid
+
 from datetime import date
 from typing import Any
 
-from sqlalchemy import Boolean, Date, JSON, String, UniqueConstraint
+from sqlalchemy import Boolean, Date, ForeignKey, JSON, String, UniqueConstraint, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -37,6 +39,15 @@ class Customer(UUIDPKMixin, TimestampMixin, Base):
     country: Mapped[str] = mapped_column(String(2), nullable=False, default="IN")
 
     notes: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    # Which rate card this customer buys on. NULL means the default list, and
+    # if there is no default, the variant's own selling_price.
+    price_list_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("price_lists.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # Raw row from legacy import — Richie fields with no direct home in RetailOS

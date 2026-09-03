@@ -29,10 +29,13 @@ class CustomerBase(BaseModel):
 
 
 class CustomerCreate(CustomerBase):
-    pass
+    # Which rate card this customer buys on. NULL = the default list, or the
+    # variant's own price when there is no default.
+    price_list_id: uuid.UUID | None = None
 
 
 class CustomerUpdate(BaseModel):
+    price_list_id: uuid.UUID | None = None
     name: str | None = Field(default=None, min_length=1, max_length=255)
     phone: str | None = None
     email: EmailStr | None = None
@@ -52,6 +55,7 @@ class CustomerUpdate(BaseModel):
 
 class CustomerRead(ORMModel):
     id: uuid.UUID
+    price_list_id: uuid.UUID | None = None
     name: str
     phone: str | None
     email: EmailStr | None

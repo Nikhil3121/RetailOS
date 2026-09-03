@@ -47,6 +47,7 @@ from app.schemas.sale import (
 from app.services.audit import AuditService
 from app.services.day_session import DaySessionService
 from app.services.inventory import InventoryService
+from app.services.price_list import PriceListService
 
 
 _ZERO = Decimal("0.00")
@@ -169,6 +170,18 @@ class SaleService:
                 code="VARIANT_NOT_FOUND",
             )
 
+        # THE RATE FOR THIS CUSTOMER, resolved once for the whole cart.
+        #
+        # Wholesale, retail and dealer customers pay different prices for the
+        # same item. This is the single place a selling rate is chosen; the
+        # /price-lists/resolve endpoint the billing screen calls runs the SAME
+        # function, so the price on screen and the price written to the bill
+        # cannot diverge. A line that supplies its own unit_price still wins —
+        # a negotiated rate at the counter overrides the card.
+        resolved = await PriceListService(self.db).resolve(
+            variant_ids=variant_ids, customer_id=payload.customer_id
+        )
+
         lines: list[SaleLine] = []
         subtotal_gross = _ZERO  # pre-discount, pre-tax
         subtotal_net = _ZERO    # after discount, pre-tax
@@ -177,7 +190,12 @@ class SaleService:
         for idx, item in enumerate(payload.lines):
             variant = variants[item.variant_id]
             product: Product = variant.product
-            price = item.unit_price if item.unit_price is not None else variant.selling_price
+            listed = resolved.get(item.variant_id)
+            price = (
+                item.unit_price
+                if item.unit_price is not None
+                else (listed.price if listed else variant.selling_price)
+            )
             gross = _round(price * item.quantity)
             disc_amt = _round(gross * (item.discount_pct / Decimal("100")))
             derived_line_total = _round(gross - disc_amt)

@@ -12,10 +12,10 @@
  * reverses.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowLeft, RotateCcw, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, Minus, Plus, RotateCcw, ScanBarcode, TriangleAlert } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -89,6 +89,106 @@ export function SaleReturn(): JSX.Element {
   }, [estimate]);
 
   const chosen = rows.filter((r) => Number(qty[r.sale_line_id] ?? 0) > 0);
+
+  /* ---------------------------------------------------------------------
+   * Smart input.
+   *
+   * A return at a counter starts with the customer putting an item on the
+   * desk, not with anyone typing a number. So the fast path is: scan it. The
+   * slow paths — stepper, "all", click the row — exist because a barcode is
+   * sometimes missing, torn, or the item is fabric sold by the metre.
+   * ------------------------------------------------------------------ */
+  const scanRef = useRef<HTMLInputElement>(null);
+  const [scan, setScan] = useState('');
+  const [lastHit, setLastHit] = useState<string | null>(null);
+  const [scanMiss, setScanMiss] = useState<string | null>(null);
+
+  /** Clamp to what is actually returnable — never let the field exceed it. */
+  function setQuantity(row: ReturnableLine, next: number): void {
+    const max = Number(row.returnable_quantity);
+    const clamped = Math.max(0, Math.min(next, max));
+    setQty((p) => ({
+      ...p,
+      [row.sale_line_id]: clamped === 0 ? '' : String(Number(clamped.toFixed(3))),
+    }));
+  }
+
+  const bump = (row: ReturnableLine, delta: number): void =>
+    setQuantity(row, Number(qty[row.sale_line_id] ?? 0) + delta);
+
+  /** Click the row: all of it, or none if it is already all. */
+  function toggleRow(row: ReturnableLine): void {
+    const max = Number(row.returnable_quantity);
+    const now = Number(qty[row.sale_line_id] ?? 0);
+    setQuantity(row, now >= max ? 0 : max);
+  }
+
+  function returnEverything(): void {
+    const all: Record<string, string> = {};
+    for (const r of rows) {
+      const max = Number(r.returnable_quantity);
+      if (max > 0) all[r.sale_line_id] = String(Number(max.toFixed(3)));
+    }
+    setQty(all);
+  }
+
+  /**
+   * Resolve a scanned or typed code to one line and add a unit.
+   *
+   * Matching is deliberately ordered: an EXACT sku wins outright, because a
+   * scanner is precise and a fuzzy name match must never beat it. Only then
+   * does it fall back to a contains-search on the product name, for the case
+   * where someone types "kurta" by hand.
+   */
+  function applyScan(raw: string): void {
+    const q = raw.trim().toLowerCase();
+    if (!q) return;
+    setScanMiss(null);
+
+    const exact = rows.find((r) => r.sku.toLowerCase() === q);
+    const candidates = exact
+      ? [exact]
+      : rows.filter(
+          (r) =>
+            r.product_name.toLowerCase().includes(q) ||
+            r.variant_name.toLowerCase().includes(q) ||
+            r.sku.toLowerCase().includes(q),
+        );
+
+    const usable = candidates.filter((r) => Number(r.returnable_quantity) > 0);
+    if (usable.length === 0) {
+      setScanMiss(
+        candidates.length > 0
+          ? 'That item is on this bill but has already been fully returned.'
+          : 'No line on this bill matches that code.',
+      );
+      setScan('');
+      return;
+    }
+    if (usable.length > 1) {
+      setScanMiss(`${usable.length} lines match — type more of the code or use the steppers.`);
+      return;
+    }
+
+    const row = usable[0];
+    bump(row, 1);
+    setLastHit(row.sale_line_id);
+    setScan('');
+  }
+
+  // The scan box owns focus on arrival: the first thing that happens is an
+  // item being scanned, so nothing should have to be clicked first.
+  useEffect(() => {
+    if (rows.length > 0) scanRef.current?.focus();
+  }, [rows.length]);
+
+  // Clear the "just added" highlight so a second scan of the same line still
+  // reads as a new event.
+  useEffect(() => {
+    if (!lastHit) return;
+    const t = setTimeout(() => setLastHit(null), 1200);
+    return () => clearTimeout(t);
+  }, [lastHit]);
   const nothingLeft = rows.length > 0 && rows.every((r) => Number(r.returnable_quantity) <= 0);
 
   const save = useMutation({
@@ -204,9 +304,39 @@ export function SaleReturn(): JSX.Element {
 
       {rows.length > 0 && (
         <GlassCard className="p-0">
-          <div className="border-b border-border px-4 py-3 text-xs font-medium text-slate-400">
-            What is coming back
+          <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
+            <div className="flex min-w-[260px] flex-1 items-center gap-2 rounded-lg border-2 border-brand-600 bg-brand-600/10 px-3">
+              <ScanBarcode className="h-4 w-4 shrink-0 text-brand-400" />
+              <input
+                ref={scanRef}
+                value={scan}
+                onChange={(e) => setScan(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    // Read the LIVE value — a scanner fires the whole string
+                    // plus Enter faster than React flushes the controlled input.
+                    applyScan(e.currentTarget.value || scan);
+                  }
+                }}
+                placeholder="Scan the item coming back, or type a SKU…"
+                autoComplete="off"
+                className="h-10 flex-1 bg-transparent font-mono text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
+              />
+            </div>
+            <Button variant="secondary" size="sm" onClick={returnEverything}>
+              Return everything
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setQty({})}>
+              Clear
+            </Button>
           </div>
+
+          {scanMiss && (
+            <div className="border-b border-border bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
+              {scanMiss}
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-xs text-slate-500">
@@ -225,7 +355,10 @@ export function SaleReturn(): JSX.Element {
                     key={r.sale_line_id}
                     row={r}
                     value={qty[r.sale_line_id] ?? ''}
-                    onChange={(v) => setQty((p) => ({ ...p, [r.sale_line_id]: v }))}
+                    justAdded={lastHit === r.sale_line_id}
+                    onSet={(n) => setQuantity(r, n)}
+                    onBump={(d) => bump(r, d)}
+                    onToggle={() => toggleRow(r)}
                   />
                 ))}
               </tbody>
@@ -314,20 +447,34 @@ export function SaleReturn(): JSX.Element {
 }
 
 function ReturnRow({
-  row, value, onChange,
+  row, value, justAdded, onSet, onBump, onToggle,
 }: {
   row: ReturnableLine;
   value: string;
-  onChange: (v: string) => void;
+  justAdded: boolean;
+  onSet: (n: number) => void;
+  onBump: (delta: number) => void;
+  onToggle: () => void;
 }): JSX.Element {
   const returnable = Number(row.returnable_quantity);
   const spent = returnable <= 0;
   const entered = Number(value || 0);
-  const over = entered > returnable;
 
   return (
-    <tr className={cn('border-b border-border/50 last:border-b-0', spent && 'opacity-50')}>
-      <td className="px-3 py-2">
+    <tr
+      className={cn(
+        'border-b border-border/50 last:border-b-0 transition-colors',
+        spent && 'opacity-50',
+        justAdded && 'bg-brand-600/15',
+        entered > 0 && !justAdded && 'bg-surface-muted',
+      )}
+    >
+      {/* Clicking the item toggles the whole line in or out. Most returns are
+          "all of this one", and that should not cost any typing. */}
+      <td
+        className={cn('px-3 py-2', !spent && 'cursor-pointer')}
+        onClick={() => !spent && onToggle()}
+      >
         <div className="font-medium text-white">{row.product_name}</div>
         <div className="text-xs text-slate-500">
           {row.variant_name} · <span className="font-mono">{row.sku}</span>
@@ -343,24 +490,40 @@ function ReturnRow({
         {Number(row.returned_quantity) || '—'}
       </td>
       <td className="money px-3 py-2 text-right font-medium text-white">{returnable}</td>
-      <td className="px-3 py-2 text-right">
-        <input
-          type="number"
-          min="0"
-          max={returnable}
-          step="0.001"
-          disabled={spent}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="0"
-          className={cn(
-            'w-24 rounded-lg border bg-surface-muted px-2 py-1 text-right text-sm text-slate-100',
-            'focus:outline-none focus:ring-2',
-            over
-              ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500/25'
-              : 'border-border-strong focus:border-brand-600 focus:ring-brand-600/25',
-          )}
-        />
+      <td className="px-3 py-2">
+        <div className="flex items-center justify-end gap-1">
+          <button
+            type="button"
+            disabled={spent || entered <= 0}
+            onClick={() => onBump(-1)}
+            aria-label="One fewer"
+            className="grid h-7 w-7 place-items-center rounded-md border border-border-strong text-slate-300 hover:bg-surface-muted disabled:opacity-40"
+          >
+            <Minus className="h-3.5 w-3.5" />
+          </button>
+          {/* Still typeable: fabric comes back as 2.5 metres, which no
+              stepper should have to click to. */}
+          <input
+            type="number"
+            min="0"
+            max={returnable}
+            step="0.001"
+            disabled={spent}
+            value={value}
+            onChange={(e) => onSet(Number(e.target.value))}
+            placeholder="0"
+            className="money w-16 rounded-md border border-border-strong bg-surface-muted px-2 py-1 text-center text-sm text-slate-100 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/25"
+          />
+          <button
+            type="button"
+            disabled={spent || entered >= returnable}
+            onClick={() => onBump(1)}
+            aria-label="One more"
+            className="grid h-7 w-7 place-items-center rounded-md border border-border-strong text-slate-300 hover:bg-surface-muted disabled:opacity-40"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </td>
     </tr>
   );

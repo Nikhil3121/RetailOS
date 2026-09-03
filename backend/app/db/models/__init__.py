@@ -23,6 +23,7 @@ from app.db.models.commission import (
 )
 from app.db.models.coupon import Coupon, CouponDiscountType, CouponRedemption
 from app.db.models.customer import Customer
+from app.db.models.price_list import PriceList, PriceListItem
 from app.db.models.day_session import DaySession, DayStatus
 from app.db.models.expense import Expense, ExpenseCategory, ExpenseStatus
 from app.db.models.inventory import MovementKind, StockBalance, StockMovement
@@ -68,6 +69,8 @@ __all__ = [
     "CouponDiscountType",
     "CouponRedemption",
     "Customer",
+    "PriceList",
+    "PriceListItem",
     "DaySession",
     "DayStatus",
     "Expense",
