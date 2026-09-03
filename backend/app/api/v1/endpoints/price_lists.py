@@ -83,8 +83,7 @@ async def update_price_list(
     summary="Every rate on this list. Absent variants use their own price.",
 )
 async def list_items(price_list_id: uuid.UUID, db: DbSession) -> list[PriceListItemRead]:
-    rows = await PriceListService(db).items_for(price_list_id)
-    return [PriceListItemRead.model_validate(r) for r in rows]
+    return await PriceListService(db).items_for_display(price_list_id)
 
 
 @router.put(

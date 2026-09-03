@@ -48,6 +48,7 @@ import {
   type SalePaymentInput,
 } from '@/lib/sales-api';
 import { listStores } from '@/lib/stores-api';
+import { resolvePrices, type ResolvedPrice } from '@/lib/price-lists-api';
 import { findUserByStaffCode, listUsers } from '@/lib/users-api';
 import { cn } from '@/lib/cn';
 import {
@@ -963,6 +964,45 @@ export function Billing(): JSX.Element {
   const storeLabel =
     storesQuery.data?.items.find((st) => st.id === storeId)?.name ?? 'No store selected';
 
+  /**
+   * The customer's rate for everything in the cart.
+   *
+   * Asked of the server, never computed here — /price-lists/resolve runs the
+   * SAME function the sale service uses when it writes the line, so the price
+   * on screen and the price on the bill cannot diverge.
+   *
+   * Re-resolved when the customer changes, because switching from walk-in to a
+   * wholesale account is exactly when every price on screen should move.
+   */
+  const cartVariantIds = lines.map((l) => l.variant_id);
+  const pricingQuery = useQuery({
+    queryKey: ['resolve-prices', customerId ?? 'walk-in', cartVariantIds.join(',')],
+    queryFn: () => resolvePrices(cartVariantIds, customerId || null),
+    enabled: cartVariantIds.length > 0,
+  });
+  const pricing = useMemo(() => {
+    const m = new Map<string, ResolvedPrice>();
+    for (const r of pricingQuery.data ?? []) m.set(r.variant_id, r);
+    return m;
+  }, [pricingQuery.data]);
+
+  // Apply the resolved rate to any line still sitting at the shelf price. A
+  // line the cashier has edited by hand is left alone — a negotiated rate must
+  // survive the customer being attached afterwards.
+  useEffect(() => {
+    if (pricing.size === 0) return;
+    setLines((ls) =>
+      ls.map((l) => {
+        const r = pricing.get(l.variant_id);
+        if (!r) return l;
+        const atBase = Number(l.unit_price) === Number(r.base_price);
+        return atBase && Number(l.unit_price) !== Number(r.price)
+          ? { ...l, unit_price: r.price }
+          : l;
+      }),
+    );
+  }, [pricing]);
+
   const busy = save.isPending;
   const customerName = customerId
     ? customersQuery.data?.items.find((c) => c.id === customerId)?.name
@@ -1513,6 +1553,20 @@ export function Billing(): JSX.Element {
                                 when there IS a saving — "Saved Rs.0" is
                                 noise, and a line sold above MRP is not a
                                 discount. */}
+                            {/* Say WHERE a non-shelf price came from. Without
+                                this the cashier sees 700 on a 899 label and
+                                cannot tell a rate card from a mistake. */}
+                            {(() => {
+                              const r = pricing.get(l.variant_id);
+                              if (!r || r.source !== 'price_list') return null;
+                              if (Number(l.unit_price) !== Number(r.price)) return null;
+                              return (
+                                <div className="mt-0.5 text-xs text-brand-400">
+                                  Price list rate · shelf ₹
+                                  {Number(r.base_price).toFixed(2)}
+                                </div>
+                              );
+                            })()}
                             {presented.showsSaving && (
                               <div className="mt-1 text-xs">
                                 <span className="text-slate-500 line-through">

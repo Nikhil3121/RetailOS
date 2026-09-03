@@ -30,6 +30,7 @@ import { Brands } from '@/pages/catalog/Brands';
 import { Categories } from '@/pages/catalog/Categories';
 import { ProductEditor } from '@/pages/catalog/ProductEditor';
 import { Products } from '@/pages/catalog/Products';
+import { PriceLists } from '@/pages/catalog/PriceLists';
 import { Units } from '@/pages/catalog/Units';
 import { Billing } from '@/pages/billing/Billing';
 import { OutstandingDues } from '@/pages/billing/OutstandingDues';
@@ -95,6 +96,7 @@ export const router = createHashRouter([
           { path: 'categories', element: <Categories /> },
           { path: 'brands', element: <Brands /> },
           { path: 'units', element: <Units /> },
+          { path: 'price-lists', element: <PriceLists /> },
 
           // Operations
           { path: 'inventory', element: <Inventory /> },

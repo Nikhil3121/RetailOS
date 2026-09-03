@@ -3,6 +3,8 @@ import type { Paginated } from '@/lib/suppliers-api';
 
 export interface Customer {
   id: string;
+  /** Rate card this customer buys on. Null = the default list, or shelf price. */
+  price_list_id: string | null;
   name: string;
   phone: string | null;
   email: string | null;
@@ -24,6 +26,7 @@ export interface Customer {
 
 export interface CustomerCreate {
   name: string;
+  price_list_id?: string | null;
   phone?: string | null;
   email?: string | null;
   gstin?: string | null;

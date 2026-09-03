@@ -10,7 +10,9 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Select } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Textarea';
+import { listPriceLists } from '@/lib/price-lists-api';
 import { ApiError } from '@/lib/api';
 import {
   createCustomer,
@@ -198,6 +200,11 @@ function CreateCustomerModal({
   });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Rate cards to choose from. Cheap, cached, and the dialog is rarely open.
+  const priceListsQuery = useQuery({
+    queryKey: ['price-lists'],
+    queryFn: () => listPriceLists(),
+  });
 
   async function onSubmit(values: CustomerCreate): Promise<void> {
     setError(null);
@@ -212,6 +219,9 @@ function CreateCustomerModal({
         company_name: values.company_name?.trim() || null,
         date_of_birth: values.date_of_birth || null,
         anniversary: values.anniversary || null,
+        // Empty means "no list of their own" — they fall to the default list,
+        // or the shelf price if there is none.
+        price_list_id: values.price_list_id || null,
       });
       reset();
       onCreated();
@@ -235,6 +245,16 @@ function CreateCustomerModal({
         </div>
         <div className="grid grid-cols-3 gap-4">
           <Input label="GSTIN" {...register('gstin')} />
+          {/* The rate card this customer buys on. Blank is the common case —
+              a walk-in falls to the default list, or the shelf price. */}
+          <Select
+            label="Price list"
+            placeholder="— Default —"
+            options={(priceListsQuery.data ?? [])
+              .filter((pl) => pl.is_active)
+              .map((pl) => ({ label: pl.name, value: pl.id }))}
+            {...register('price_list_id')}
+          />
           <Input label="Date of birth" type="date" {...register('date_of_birth')} />
           <Input label="Anniversary" type="date" {...register('anniversary')} />
         </div>

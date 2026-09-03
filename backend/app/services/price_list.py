@@ -27,10 +27,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.db.models.customer import Customer
 from app.db.models.price_list import PriceList, PriceListItem
-from app.db.models.product import ProductVariant
+from app.db.models.product import Product, ProductVariant
 from app.schemas.price_list import (
     PriceListCreate,
     PriceListItemInput,
+    PriceListItemRead,
     PriceListUpdate,
     ResolvedPrice,
 )
@@ -249,6 +250,40 @@ class PriceListService:
             )
         await self.db.delete(row)
         await self.db.flush()
+
+    async def items_for_display(self, price_list_id: uuid.UUID) -> list[PriceListItemRead]:
+        """Rates joined to what they price.
+
+        A rate row showing only a UUID is unusable, and resolving 9,000 variants
+        client-side to fix that would be absurd. One join answers it.
+        """
+        await self.get(price_list_id)
+        rows = await self.db.execute(
+            select(
+                PriceListItem,
+                Product.name,
+                ProductVariant.name,
+                ProductVariant.sku,
+                ProductVariant.selling_price,
+            )
+            .join(ProductVariant, ProductVariant.id == PriceListItem.variant_id)
+            .join(Product, Product.id == ProductVariant.product_id)
+            .where(PriceListItem.price_list_id == price_list_id)
+            .order_by(Product.name, ProductVariant.sort_order)
+        )
+        return [
+            PriceListItemRead(
+                id=item.id,
+                price_list_id=item.price_list_id,
+                variant_id=item.variant_id,
+                price=item.price,
+                product_name=product_name,
+                variant_name=variant_name,
+                sku=sku,
+                base_price=shelf,
+            )
+            for item, product_name, variant_name, sku, shelf in rows.all()
+        ]
 
     async def items_for(self, price_list_id: uuid.UUID) -> list[PriceListItem]:
         await self.get(price_list_id)

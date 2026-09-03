@@ -51,6 +51,12 @@ class PriceListItemRead(ORMModel):
     price_list_id: uuid.UUID
     variant_id: uuid.UUID
     price: Decimal
+    # Denormalised for display. Without these the rates table can only show a
+    # UUID, and the screen is unusable however correct the data is.
+    sku: str | None = None
+    product_name: str | None = None
+    variant_name: str | None = None
+    base_price: Decimal | None = None
 
 
 class ResolvedPrice(BaseModel):
