@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 from datetime import date, datetime
 
 from pydantic import BaseModel, EmailStr, Field
@@ -32,10 +33,12 @@ class CustomerCreate(CustomerBase):
     # Which rate card this customer buys on. NULL = the default list, or the
     # variant's own price when there is no default.
     price_list_id: uuid.UUID | None = None
+    credit_limit: Decimal | None = Field(default=None, ge=0, decimal_places=2, max_digits=14)
 
 
 class CustomerUpdate(BaseModel):
     price_list_id: uuid.UUID | None = None
+    credit_limit: Decimal | None = Field(default=None, ge=0, decimal_places=2, max_digits=14)
     name: str | None = Field(default=None, min_length=1, max_length=255)
     phone: str | None = None
     email: EmailStr | None = None
@@ -56,6 +59,8 @@ class CustomerUpdate(BaseModel):
 class CustomerRead(ORMModel):
     id: uuid.UUID
     price_list_id: uuid.UUID | None = None
+    credit_limit: Decimal | None = None
+    credit_limit: Decimal | None = Field(default=None, ge=0, decimal_places=2, max_digits=14)
     name: str
     phone: str | None
     email: EmailStr | None

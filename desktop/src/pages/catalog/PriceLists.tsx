@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Plus, Search, Star, Tag, Trash2 } from 'lucide-react';
+import { Check, Plus, Search, Star, Tag, Trash2, TriangleAlert } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -81,6 +81,31 @@ export function PriceLists(): JSX.Element {
         </div>
       )}
 
+      {/*
+        A FAILED LOAD IS NOT AN EMPTY LIST.
+
+        Without this, a 404 renders as "No price lists yet." — indistinguishable
+        from a shop that simply has not made one. That mistake hid a missing
+        deployment twice; it is the empty state that must be earned, not the
+        error.
+      */}
+      {listsQuery.isError && (
+        <div className="flex items-start gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            <b className="font-semibold">Could not load price lists.</b>{' '}
+            {listsQuery.error instanceof ApiError
+              ? listsQuery.error.message
+              : 'The server did not respond as expected.'}
+            {listsQuery.error instanceof ApiError &&
+              listsQuery.error.status === 404 && (
+                <> This server does not support price lists yet — the feature is
+                built but has not been deployed to it.</>
+              )}
+          </span>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
         <GlassCard className="min-w-0 p-0">
           <div className="border-b border-border px-4 py-3 text-xs font-medium text-slate-400">
@@ -88,7 +113,11 @@ export function PriceLists(): JSX.Element {
           </div>
           {lists.length === 0 ? (
             <div className="px-4 py-10 text-center text-sm text-slate-500">
-              {listsQuery.isLoading ? 'Loading…' : 'No price lists yet.'}
+              {listsQuery.isLoading
+                ? 'Loading…'
+                : listsQuery.isError
+                  ? 'Could not load.'
+                  : 'No price lists yet.'}
             </div>
           ) : (
             <ul className="p-2">

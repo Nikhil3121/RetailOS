@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 
 from datetime import date
 from typing import Any
 
-from sqlalchemy import Boolean, Date, ForeignKey, JSON, String, UniqueConstraint, Uuid
+from sqlalchemy import Boolean, Date, ForeignKey, JSON, Numeric, String, UniqueConstraint, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -46,6 +47,12 @@ class Customer(UUIDPKMixin, TimestampMixin, Base):
         ForeignKey("price_lists.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
+    )
+
+    # Ceiling on what this customer may owe across ALL open bills.
+    # NULL = no limit, which is every existing customer.
+    credit_limit: Mapped[Decimal | None] = mapped_column(
+        Numeric(14, 2), nullable=True
     )
 
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

@@ -291,6 +291,17 @@ class SaleService:
             change_due = _ZERO
             balance_due = _round(grand_total - paid_total)
 
+        # ---- credit limit ----------------------------------------------------
+        #
+        # Checked against the customer's TOTAL outstanding, not just this bill.
+        # A limit that only looked at the bill in hand would let someone run up
+        # any amount one small credit sale at a time, which is precisely the
+        # failure a limit exists to prevent.
+        if balance_due > _ZERO and payload.customer_id is not None:
+            await self._assert_within_credit_limit(
+                customer_id=payload.customer_id, adding=balance_due
+            )
+
         # Reserve stock before anything else. In a mall billing flow the
         # cashier cannot be blocked at checkout because inventory tracking is
         # behind reality (items picked up before the goods-receipt is posted).
@@ -356,6 +367,43 @@ class SaleService:
             )
 
         return await self.get(sale_id_placeholder)
+
+    async def _assert_within_credit_limit(
+        self, *, customer_id: uuid.UUID, adding: Decimal
+    ) -> None:
+        """Refuse a credit sale that would take the customer over their limit.
+
+        Enforced here rather than by a database constraint: the rule spans every
+        open bill this customer has, which no CHECK can express, and the answer
+        has to be a sentence a cashier can act on.
+        """
+        customer = await self.db.get(Customer, customer_id)
+        if customer is None or customer.credit_limit is None:
+            return  # no limit set — the default for every existing customer
+
+        # Only COMPLETED sales count. A voided bill is not money owed, and a
+        # credit note carries a negative balance that correctly reduces the total.
+        outstanding = await self.db.scalar(
+            select(func.coalesce(func.sum(Sale.balance_due), 0)).where(
+                Sale.customer_id == customer_id,
+                Sale.status == SaleStatus.COMPLETED,
+            )
+        )
+        current = Decimal(str(outstanding or 0))
+        after = current + adding
+        if after > customer.credit_limit:
+            raise ValidationError(
+                f"{customer.name} would owe {after} against a credit limit of "
+                f"{customer.credit_limit}. They already owe {current}. "
+                f"Collect payment or raise the limit before selling on credit.",
+                code="CREDIT_LIMIT_EXCEEDED",
+                details={
+                    "customer_id": str(customer_id),
+                    "credit_limit": str(customer.credit_limit),
+                    "already_owed": str(current),
+                    "this_bill": str(adding),
+                },
+            )
 
     async def _restate_closed_session(
         self,

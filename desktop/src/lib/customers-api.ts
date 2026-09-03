@@ -5,6 +5,8 @@ export interface Customer {
   id: string;
   /** Rate card this customer buys on. Null = the default list, or shelf price. */
   price_list_id: string | null;
+  /** Ceiling on total outstanding across all open bills. Null = no limit. */
+  credit_limit: string | null;
   name: string;
   phone: string | null;
   email: string | null;
@@ -27,6 +29,7 @@ export interface Customer {
 export interface CustomerCreate {
   name: string;
   price_list_id?: string | null;
+  credit_limit?: string | null;
   phone?: string | null;
   email?: string | null;
   gstin?: string | null;

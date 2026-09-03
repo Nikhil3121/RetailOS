@@ -222,6 +222,7 @@ function CreateCustomerModal({
         // Empty means "no list of their own" — they fall to the default list,
         // or the shelf price if there is none.
         price_list_id: values.price_list_id || null,
+        credit_limit: values.credit_limit ? String(values.credit_limit) : null,
       });
       reset();
       onCreated();
@@ -254,6 +255,18 @@ function CreateCustomerModal({
               .filter((pl) => pl.is_active)
               .map((pl) => ({ label: pl.name, value: pl.id }))}
             {...register('price_list_id')}
+          />
+          {/* Checked against TOTAL outstanding across every open bill, not
+              just the one being rung up — otherwise the ceiling is trivially
+              bypassed one small credit sale at a time. */}
+          <Input
+            label="Credit limit"
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="No limit"
+            hint="Maximum this customer may owe in total. Leave blank for no limit."
+            {...register('credit_limit')}
           />
           <Input label="Date of birth" type="date" {...register('date_of_birth')} />
           <Input label="Anniversary" type="date" {...register('anniversary')} />

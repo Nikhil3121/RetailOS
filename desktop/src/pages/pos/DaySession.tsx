@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { DoorClosed, DoorOpen, Wallet } from 'lucide-react';
+import { DoorClosed, DoorOpen, Wallet, TriangleAlert } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -94,14 +94,36 @@ export function DaySessionPage(): JSX.Element {
         <div className="text-sm text-slate-500">Checking session…</div>
       )}
 
+      {/*
+        A FAILED CHECK IS NOT "NO SESSION".
+
+        Without this the page fell through to "open a new session" whenever the
+        request errored — so a cashier whose network blipped would open a SECOND
+        shift for a store that already had one, splitting the day's cash across
+        two sets of books. The open action is withheld until we actually know.
+      */}
+      {storeId && sessionQuery.isError && (
+        <div className="flex items-start gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            <b className="font-semibold">Could not check this store's session.</b>{' '}
+            {sessionQuery.error instanceof ApiError
+              ? sessionQuery.error.message
+              : 'The server did not respond.'}{' '}
+            Opening a session is disabled until this succeeds — a second open
+            shift would split the day's cash across two sets of books.
+          </span>
+        </div>
+      )}
+
       {/* A CLOSED session used to be invisible: the page jumped straight to
           "open a new one", so a shift whose figures had been restated after
           sign-off could not be seen at all. */}
-      {storeId && !sessionQuery.isLoading && !isOpen && lastClosed && (
+      {storeId && !sessionQuery.isLoading && !sessionQuery.isError && !isOpen && lastClosed && (
         <ClosedSessionCard session={lastClosed} />
       )}
 
-      {storeId && !sessionQuery.isLoading && !isOpen && (
+      {storeId && !sessionQuery.isLoading && !sessionQuery.isError && !isOpen && (
         <OpenSessionCard
           storeId={storeId}
           onOpened={(session) => {

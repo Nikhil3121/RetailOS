@@ -59,6 +59,17 @@ export function RestatementHistory({ sessionId }: { sessionId: string }): JSX.El
   });
 
   const entries = query.data?.items ?? [];
+
+  // "Never restated" and "could not check" are different claims, and this
+  // component's whole purpose is explaining why a signed-off figure moved.
+  if (query.isError) {
+    return (
+      <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+        Could not load the restatement history for this shift. If its figures
+        changed after sign-off, the reason is not shown here.
+      </div>
+    );
+  }
   if (query.isLoading || entries.length === 0) return null;
 
   return (

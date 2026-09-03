@@ -50,6 +50,18 @@ export function LocalSalesPanel(): JSX.Element | null {
   if (!available) return null;
 
   const sales = query.data ?? [];
+
+  // A panel that reports unsynced bills must NOT go silent when the check
+  // itself fails — "nothing waiting" and "could not look" are opposite facts,
+  // and only one of them means the cashier can go home.
+  if (query.isError) {
+    return (
+      <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+        Could not read this terminal's bills. Unsynced sales may exist — do not
+        assume everything has reached the server.
+      </div>
+    );
+  }
   if (sales.length === 0) return null;
 
   const pending = unsyncedCount(sales);

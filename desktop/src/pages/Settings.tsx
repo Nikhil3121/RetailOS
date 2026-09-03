@@ -116,6 +116,15 @@ function TwoFactorPanel(): JSX.Element {
 
   return (
     <GlassCard className="max-w-2xl">
+      {/* A failed status read must never render as "two-factor is off" — that
+          tells someone their account is unprotected when it may not be, and
+          invites them to re-run a setup that would revoke the working one. */}
+      {statusQuery.isError && (
+        <div className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+          Could not read your two-factor status. What is shown below may not
+          reflect your account.
+        </div>
+      )}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
           <span
