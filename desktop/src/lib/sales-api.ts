@@ -21,6 +21,8 @@ export interface SaleLine {
   hsn_code: string | null;
   quantity: string;
   unit_price: string;
+  /** Printed MRP at the time of sale. Null on bills written before this existed. */
+  mrp: string | null;
   discount_pct: string;
   discount_amount: string;
   tax_rate: string;

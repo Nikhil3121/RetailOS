@@ -11,6 +11,7 @@ from app.schemas.common import ORMModel
 
 
 class StoreBase(BaseModel):
+    receipt_message: str | None = Field(default=None, max_length=280)
     code: str = Field(min_length=1, max_length=32, description="Unique short code, e.g. 'DEL01'")
     name: str = Field(min_length=1, max_length=255)
     address_line1: str | None = Field(default=None, max_length=255)
@@ -30,6 +31,7 @@ class StoreCreate(StoreBase):
 
 
 class StoreUpdate(BaseModel):
+    receipt_message: str | None = Field(default=None, max_length=280)
     name: str | None = Field(default=None, min_length=1, max_length=255)
     address_line1: str | None = None
     address_line2: str | None = None
@@ -44,6 +46,7 @@ class StoreUpdate(BaseModel):
 
 
 class StoreRead(ORMModel):
+    receipt_message: str | None = None
     id: uuid.UUID
     code: str
     name: str

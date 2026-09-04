@@ -44,6 +44,9 @@ export function Invoice(): JSX.Element {
     : undefined;
 
   const isReturn = sale?.doc_type === 'return';
+  // Historical lines have no recorded MRP. Omit the column entirely rather
+  // than printing a row of dashes, or worse, today's catalogue figure.
+  const showsMrp = Boolean(sale?.lines.some((l) => l.mrp && Number(l.mrp) > 0));
   /** Credit notes store negative money; a person is shown the positive figure. */
   const show = (v: string | number | null | undefined): string =>
     Math.abs(Number(v ?? 0)).toFixed(2);
@@ -193,6 +196,7 @@ export function Invoice(): JSX.Element {
                 <th className="py-2">#</th>
                 <th>Item</th>
                 <th className="text-right">Qty</th>
+                {showsMrp && <th className="text-right">MRP</th>}
                 <th className="text-right">Price</th>
                 <th className="text-right">GST %</th>
                 <th className="text-right">Total</th>
@@ -213,6 +217,11 @@ export function Invoice(): JSX.Element {
                     )}
                   </td>
                   <td className="py-2 text-right font-mono">{show(l.quantity)}</td>
+                  {showsMrp && (
+                    <td className="py-2 text-right font-mono">
+                      {l.mrp && Number(l.mrp) > 0 ? `₹${show(l.mrp)}` : '—'}
+                    </td>
+                  )}
                   <td className="py-2 text-right font-mono">₹{show(l.unit_price)}</td>
                   <td className="py-2 text-right font-mono">{l.tax_rate}%</td>
                   <td className="py-2 text-right font-mono">₹{show(l.line_total)}</td>
@@ -290,6 +299,13 @@ export function Invoice(): JSX.Element {
           </section>
 
           <footer className="mt-8 border-t border-border pt-4 text-center text-xs text-slate-500">
+            {/* The shop's own words, set per branch — a festival greeting, a
+                return policy. Falls back to the generic line when unset. */}
+            {store?.receipt_message ? (
+              <div className="mb-1 text-sm font-medium text-slate-700">
+                {store.receipt_message}
+              </div>
+            ) : null}
             Thank you for shopping with us.
           </footer>
         </div>

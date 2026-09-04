@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
+import { Textarea } from '@/components/ui/Textarea';
 import { ApiError } from '@/lib/api';
 import {
   createStore,
@@ -182,6 +183,7 @@ function CreateStoreModal({
         code: values.code.trim().toUpperCase(),
         name: values.name.trim(),
         gstin: values.gstin?.trim() || null,
+        receipt_message: values.receipt_message?.trim() || null,
       });
       reset();
       onCreated();
@@ -230,6 +232,16 @@ function CreateStoreModal({
           <Input label="Phone" {...register('phone')} />
         </div>
         <Input label="Email" type="email" {...register('email')} />
+        {/* Printed under the totals on this branch's bills. Per store, because
+            the two branches file under separate GSTINs and may want to say
+            different things. */}
+        <Textarea
+          label="Message on the bill"
+          rows={2}
+          placeholder="Happy Holi — M.S. Mall wishes you well"
+          hint="Optional. Appears under the totals on every bill from this branch."
+          {...register('receipt_message')}
+        />
 
         {error && (
           <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">

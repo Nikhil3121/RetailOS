@@ -35,6 +35,11 @@ class Store(UUIDPKMixin, TimestampMixin, Base):
     phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # Free text printed under the totals on this branch's bills — "Happy Holi",
+    # a festival greeting, a return-policy line. Per store: the two branches are
+    # separate businesses under separate GSTINs.
+    receipt_message: Mapped[str | None] = mapped_column(String(280), nullable=True)
+
     is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
 
     users: Mapped[list["User"]] = relationship("User", back_populates="store")

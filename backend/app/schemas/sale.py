@@ -230,6 +230,7 @@ class SaleLineRead(ORMModel):
     hsn_code: str | None
     quantity: Decimal
     unit_price: Decimal
+    mrp: Decimal | None = None
     discount_pct: Decimal
     discount_amount: Decimal
     tax_rate: Decimal

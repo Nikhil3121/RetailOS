@@ -302,6 +302,10 @@ class SaleLine(UUIDPKMixin, TimestampMixin, Base):
 
     quantity: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
     unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    # The printed MRP AT THE TIME OF SALE. Snapshotted, not read back from the
+    # variant, because today's MRP on a three-month-old bill would show the
+    # customer a saving they never received. NULL on lines written before this.
+    mrp: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     # Percentage discount off the line (0..100).
     discount_pct: Mapped[Decimal] = mapped_column(
         Numeric(5, 2), nullable=False, default=Decimal("0.00")

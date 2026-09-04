@@ -1,6 +1,8 @@
 import { apiRequest } from '@/lib/api';
 
 export interface Store {
+  /** Free text printed under the totals on this branch's bills. */
+  receipt_message: string | null;
   id: string;
   code: string;
   name: string;
@@ -26,6 +28,7 @@ export interface StoresPage {
 }
 
 export interface CreateStoreBody {
+  receipt_message?: string | null;
   code: string;
   name: string;
   address_line1?: string | null;

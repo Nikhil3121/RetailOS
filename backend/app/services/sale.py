@@ -267,6 +267,8 @@ class SaleService:
                     hsn_code=product.hsn_code,
                     quantity=item.quantity,
                     unit_price=price,
+                    # Snapshot alongside the price it is compared against.
+                    mrp=variant.mrp,
                     discount_pct=item.discount_pct,
                     discount_amount=disc_amt,
                     tax_rate=tax_rate,
