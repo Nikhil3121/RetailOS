@@ -42,3 +42,6 @@ Thumbs.db
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# SQLite test journal
+*.db-journal

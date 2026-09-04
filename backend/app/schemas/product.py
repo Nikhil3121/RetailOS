@@ -123,6 +123,8 @@ class ProductBase(BaseModel):
 
 
 class ProductCreate(ProductBase):
+    purchase_unit_id: uuid.UUID | None = None
+    purchase_conversion: Decimal = Field(default=Decimal('1'), gt=0, decimal_places=4, max_digits=14)
     variants: list[VariantCreate] = Field(
         default_factory=list,
         description=(
@@ -134,6 +136,8 @@ class ProductCreate(ProductBase):
 
 
 class ProductUpdate(BaseModel):
+    purchase_unit_id: uuid.UUID | None = None
+    purchase_conversion: Decimal | None = Field(default=None, gt=0, decimal_places=4, max_digits=14)
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     hsn_code: str | None = Field(default=None, max_length=16)
@@ -145,6 +149,8 @@ class ProductUpdate(BaseModel):
 
 
 class ProductRead(ORMModel):
+    purchase_unit_id: uuid.UUID | None = None
+    purchase_conversion: Decimal = Decimal('1')
     id: uuid.UUID
     name: str
     description: str | None

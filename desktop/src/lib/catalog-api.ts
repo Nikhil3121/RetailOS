@@ -160,6 +160,13 @@ export interface Product {
   brand_id: string | null;
   category_id: string | null;
   unit_id: string;
+  /**
+   * The unit goods ARRIVE in. Null means "same as the base unit".
+   * Stock is only ever held in the BASE unit — this is for goods receipt.
+   */
+  purchase_unit_id?: string | null;
+  /** Base units per purchase unit. 1 carton = 12 pieces -> "12". */
+  purchase_conversion?: string;
   is_active: boolean;
   variants: Variant[];
   images: ProductImage[];
@@ -175,6 +182,13 @@ export interface ProductSummary {
   brand_id: string | null;
   category_id: string | null;
   unit_id: string;
+  /**
+   * The unit goods ARRIVE in. Null means "same as the base unit".
+   * Stock is only ever held in the BASE unit — this is for goods receipt.
+   */
+  purchase_unit_id?: string | null;
+  /** Base units per purchase unit. 1 carton = 12 pieces -> "12". */
+  purchase_conversion?: string;
   is_active: boolean;
   variant_count: number;
   primary_sku: string | null;
@@ -212,6 +226,13 @@ export interface ProductCreateBody {
   brand_id?: string | null;
   category_id?: string | null;
   unit_id: string;
+  /**
+   * The unit goods ARRIVE in. Null means "same as the base unit".
+   * Stock is only ever held in the BASE unit — this is for goods receipt.
+   */
+  purchase_unit_id?: string | null;
+  /** Base units per purchase unit. 1 carton = 12 pieces -> "12". */
+  purchase_conversion?: string;
   is_active?: boolean;
   variants?: VariantCreateBody[];
   images?: ImageCreateBody[];

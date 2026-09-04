@@ -28,7 +28,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.db.models.inventory import MovementKind
-from app.db.models.product import ProductVariant
+from app.db.models.product import Product, ProductVariant
 from app.db.models.purchase import PurchaseOrder, PurchaseOrderLine, PurchaseOrderStatus
 from app.db.models.store import Store
 from app.db.models.supplier import Supplier
@@ -199,11 +199,19 @@ class PurchaseService:
         self._assert_status(po, {PurchaseOrderStatus.CONFIRMED}, "receive")
 
         inventory = InventoryService(self.db)
+
+        # Purchase quantities are entered in the PURCHASE unit — cartons — and
+        # stock is only ever held in the BASE unit. Convert once, here, at the
+        # single point where goods enter the ledger. Doing it in the UI instead
+        # would put the shop's stock accuracy in the hands of mental arithmetic
+        # at the receiving bay.
+        factors = await self._conversion_factors([l.variant_id for l in po.lines])
+
         for line in po.lines:
             await inventory.post_movement(
                 variant_id=line.variant_id,
                 store_id=po.store_id,
-                delta=line.quantity,
+                delta=line.quantity * factors.get(line.variant_id, Decimal("1")),
                 kind=MovementKind.PURCHASE_RECEIPT,
                 unit_cost=line.unit_cost,
                 reference_type="purchase_order",
@@ -216,6 +224,28 @@ class PurchaseService:
         po.received_at = datetime.now(timezone.utc)
         await self.db.flush()
         return po
+
+    async def _conversion_factors(
+        self, variant_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, Decimal]:
+        """Base units per purchase unit, per variant.
+
+        Defaults to 1 for anything without a purchase unit configured, which is
+        every product until someone sets one — so existing behaviour is
+        unchanged rather than merely similar.
+        """
+        if not variant_ids:
+            return {}
+        rows = await self.db.execute(
+            select(ProductVariant.id, Product.purchase_unit_id, Product.purchase_conversion)
+            .join(Product, Product.id == ProductVariant.product_id)
+            .where(ProductVariant.id.in_(variant_ids))
+        )
+        out: dict[uuid.UUID, Decimal] = {}
+        for vid, purchase_unit_id, factor in rows.all():
+            # No purchase unit means the PO was written in base units already.
+            out[vid] = Decimal(str(factor)) if purchase_unit_id else Decimal("1")
+        return out
 
     # ------------------------------------------------------------------
     # Helpers

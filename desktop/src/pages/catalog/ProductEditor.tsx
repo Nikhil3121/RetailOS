@@ -44,6 +44,8 @@ interface FormValues {
   brand_id: string;
   category_id: string;
   unit_id: string;
+  purchase_unit_id?: string | null;
+  purchase_conversion?: string;
   is_active: boolean;
   variants: Array<VariantCreateBody & { id?: string }>;
 }
@@ -98,6 +100,8 @@ export function ProductEditor(): JSX.Element {
       brand_id: "",
       category_id: "",
       unit_id: "",
+      purchase_unit_id: "",
+      purchase_conversion: "1",
       is_active: true,
       variants: [EMPTY_VARIANT()],
     },
@@ -126,6 +130,8 @@ export function ProductEditor(): JSX.Element {
       brand_id: p.brand_id ?? "",
       category_id: p.category_id ?? "",
       unit_id: p.unit_id,
+      purchase_unit_id: p.purchase_unit_id ?? "",
+      purchase_conversion: p.purchase_conversion ?? "1",
       is_active: p.is_active,
       variants: p.variants.map((v) => ({
         id: v.id,
@@ -193,6 +199,10 @@ export function ProductEditor(): JSX.Element {
           brand_id: values.brand_id || null,
           category_id: values.category_id || null,
           unit_id: values.unit_id,
+          purchase_unit_id: values.purchase_unit_id || null,
+          purchase_conversion: values.purchase_unit_id
+            ? num(values.purchase_conversion, "1")
+            : "1",
           is_active: values.is_active,
           variants: values.variants.map(cleanVariant),
         };
@@ -208,6 +218,10 @@ export function ProductEditor(): JSX.Element {
           brand_id: values.brand_id || null,
           category_id: values.category_id || null,
           unit_id: values.unit_id,
+          purchase_unit_id: values.purchase_unit_id || null,
+          purchase_conversion: values.purchase_unit_id
+            ? num(values.purchase_conversion, "1")
+            : "1",
           is_active: values.is_active,
         });
         // Persist variant changes one at a time — the update endpoint is per-variant.
@@ -289,11 +303,39 @@ export function ProductEditor(): JSX.Element {
                 {...register("name", { required: "Name is required" })}
               />
               <Select
-                label="Unit of measure"
+                label="Base unit"
                 placeholder="— Select a unit —"
                 options={unitOptions}
                 error={errors.unit_id?.message}
+                hint="Stock is always counted in this unit."
                 {...register("unit_id", { required: "Unit is required" })}
+              />
+            </div>
+
+            {/*
+              Buying unit vs stocking unit.
+
+              A wholesaler receives 20 cartons of 12 and sells single pieces.
+              Entering the conversion here means the receiving bay types "20"
+              and the ledger records 240 — the arithmetic happens once, on the
+              server, instead of in someone's head at the loading door.
+            */}
+            <div className="mt-4 grid grid-cols-2 gap-4">
+              <Select
+                label="Bought in (optional)"
+                placeholder="— Same as base unit —"
+                options={unitOptions}
+                hint="The unit goods arrive in, if it differs."
+                {...register("purchase_unit_id")}
+              />
+              <Input
+                label="Base units per purchase unit"
+                type="number"
+                step="0.0001"
+                min="0.0001"
+                placeholder="1"
+                hint="1 carton = 12 pieces → enter 12."
+                {...register("purchase_conversion")}
               />
             </div>
             <div className="mt-4">

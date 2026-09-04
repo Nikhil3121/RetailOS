@@ -307,7 +307,16 @@ export function PurchaseEditor(): JSX.Element {
             <thead className="border-b border-border bg-white/[0.02] text-left text-xs uppercase tracking-wider text-slate-400">
               <tr>
                 <th className="px-4 py-3">Product</th>
-                <th className="px-4 py-3 text-right">Qty</th>
+                {/* Quantities are entered in the product's PURCHASE unit and
+                    converted to base units on receipt — 20 cartons of 12 lands
+                    as 240 pieces. The conversion is configured per product in
+                    the catalog, and applied once, server-side. */}
+                <th className="px-4 py-3 text-right">
+                  Qty
+                  <span className="block text-xs font-normal normal-case text-slate-500">
+                    in purchase units
+                  </span>
+                </th>
                 <th className="px-4 py-3 text-right">Unit cost</th>
                 <th className="px-4 py-3 text-right">GST %</th>
                 <th className="px-4 py-3 text-right">Line total</th>

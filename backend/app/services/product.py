@@ -45,6 +45,10 @@ class ProductService:
     async def create(self, payload: ProductCreate) -> Product:
         # Validate all referenced FKs up-front so we fail fast with a clean error.
         await self._resolve_or_raise(Unit, payload.unit_id, "UNIT_NOT_FOUND", "Unit not found.")
+        if payload.purchase_unit_id is not None:
+            await self._resolve_or_raise(
+                Unit, payload.purchase_unit_id, "UNIT_NOT_FOUND", "Purchase unit not found."
+            )
         if payload.brand_id is not None:
             await self._resolve_or_raise(Brand, payload.brand_id, "BRAND_NOT_FOUND", "Brand not found.")
         if payload.category_id is not None:
@@ -63,6 +67,12 @@ class ProductService:
             brand_id=payload.brand_id,
             category_id=payload.category_id,
             unit_id=payload.unit_id,
+            purchase_unit_id=payload.purchase_unit_id,
+            # Always 1 when no purchase unit is set, so an unconfigured product
+            # converts 1:1 and behaves exactly as it did before.
+            purchase_conversion=(
+                payload.purchase_conversion if payload.purchase_unit_id else Decimal("1")
+            ),
             is_active=payload.is_active,
         )
         product.variants = [self._variant_from_payload(v) for v in variants]

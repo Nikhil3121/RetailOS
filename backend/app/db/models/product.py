@@ -67,6 +67,24 @@ class Product(UUIDPKMixin, TimestampMixin, Base):
         index=True,
     )
 
+    # ---- unit conversion (buy in cartons, hold in pieces) -------------------
+    #
+    # `unit_id` above is the BASE unit and the ONLY unit stock is ever held in.
+    # These two are presentation for goods receipt: a quantity entered in
+    # purchase units is multiplied by the factor and stored in base units.
+    # Holding stock in two units would mean two answers to "how many do we
+    # have", which cannot be reconciled.
+    purchase_unit_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("units.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    # Base units per purchase unit. 1 carton = 12 pieces -> 12. Always 1 when
+    # no purchase unit is set, so existing products convert 1:1.
+    purchase_conversion: Mapped[Decimal] = mapped_column(
+        Numeric(14, 4), nullable=False, default=Decimal("1")
+    )
+
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # Raw row from legacy import (see migration 0014).
@@ -76,7 +94,13 @@ class Product(UUIDPKMixin, TimestampMixin, Base):
 
     brand: Mapped["Brand | None"] = relationship("Brand", back_populates="products")
     category: Mapped["Category | None"] = relationship("Category", back_populates="products")
-    unit: Mapped["Unit"] = relationship("Unit")
+    # `products` now has TWO foreign keys to `units` (base and purchase), so
+    # both relationships must name their column — otherwise SQLAlchemy cannot
+    # tell which one to join on and every product query fails.
+    unit: Mapped["Unit"] = relationship("Unit", foreign_keys=[unit_id])
+    purchase_unit: Mapped["Unit | None"] = relationship(
+        "Unit", foreign_keys=[purchase_unit_id]
+    )
 
     variants: Mapped[list["ProductVariant"]] = relationship(
         "ProductVariant",
