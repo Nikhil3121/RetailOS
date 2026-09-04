@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
+from app.db.models.bundle import ProductBundleItem
 from app.db.models.customer import Customer
 from app.db.models.day_session import DaySession, DayStatus
 from app.db.models.inventory import MovementKind
@@ -39,6 +40,8 @@ from app.db.models.sale import (
 )
 from app.db.models.store import Store
 from app.schemas.sale import (
+    AdvanceCreate,
+    CustomerBalance,
     SaleCreate,
     SaleLineReturnable,
     SaleReturnCreate,
@@ -488,7 +491,31 @@ class SaleService:
         balance_due: Decimal,
     ) -> None:
         """Reserve stock and insert the sale. Always called inside a SAVEPOINT."""
+        # A BUNDLE TAKES ITS COMPONENTS OUT OF STOCK, NOT ITSELF.
+        #
+        # A "saree + blouse" combo is a way of selling, not a thing on a shelf.
+        # Decrementing the bundle variant as well would count the same physical
+        # garment twice — once as the combo and once as the saree.
+        recipes = await self._bundle_recipes([l.variant_id for l in lines])
+
         for line in lines:
+            recipe = recipes.get(line.variant_id)
+            if recipe:
+                for component_id, per_bundle in recipe:
+                    await inventory.post_movement(
+                        variant_id=component_id,
+                        store_id=payload.store_id,
+                        delta=-(line.quantity * per_bundle),
+                        kind=MovementKind.SALE,
+                        unit_cost=None,
+                        reference_type="sale",
+                        reference_id=sale_id,
+                        reason=f"Bundle {line.sku}",
+                        created_by_user_id=user_id,
+                        allow_negative=True,
+                    )
+                continue
+
             await inventory.post_movement(
                 variant_id=line.variant_id,
                 store_id=payload.store_id,
@@ -539,6 +566,28 @@ class SaleService:
         self.db.add(sale)
         # The flush is what actually tests uq_sales_client_uuid.
         await self.db.flush()
+
+    async def _bundle_recipes(
+        self, variant_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, list[tuple[uuid.UUID, Decimal]]]:
+        """Component list for any of these variants that is a bundle.
+
+        One query for the whole cart. A variant absent from the result is an
+        ordinary product and moves its own stock.
+        """
+        if not variant_ids:
+            return {}
+        rows = await self.db.execute(
+            select(
+                ProductBundleItem.bundle_variant_id,
+                ProductBundleItem.component_variant_id,
+                ProductBundleItem.quantity,
+            ).where(ProductBundleItem.bundle_variant_id.in_(variant_ids))
+        )
+        out: dict[uuid.UUID, list[tuple[uuid.UUID, Decimal]]] = {}
+        for bundle_id, component_id, qty in rows.all():
+            out.setdefault(bundle_id, []).append((component_id, Decimal(str(qty))))
+        return out
 
     async def _acknowledge_replay(self, existing: Sale, payload: SaleCreate) -> Sale:
         """Return an already-stored sale, but only if this really is the same sale.
@@ -1041,6 +1090,119 @@ class SaleService:
 
         return await self.get(credit.id)
 
+    async def create_advance(
+        self, payload: AdvanceCreate, *, user_id: uuid.UUID | None
+    ) -> Sale:
+        """Money taken before goods are given.
+
+        Stored as a `sales` row with NO lines and grand_total 0, because an
+        advance is not revenue — nothing has been delivered. The money lands as
+        a NEGATIVE balance_due, meaning the shop owes the customer goods.
+
+        That sign is what makes every existing aggregate correct untouched:
+          - revenue sums grand_total, which is 0, so an advance is not sales
+          - the shift's expected cash sums payments, which are positive, so the
+            money in the drawer is accounted for
+          - the credit-limit check sums balance_due, so an advance REDUCES what
+            the customer may owe, which is exactly right
+        """
+        if payload.client_uuid:
+            existing = await self.db.scalar(
+                select(Sale).where(Sale.client_uuid == payload.client_uuid)
+            )
+            if existing is not None:
+                return await self.get(existing.id)
+
+        store = await self.db.get(Store, payload.store_id)
+        if store is None:
+            raise NotFoundError("Store not found.", code="STORE_NOT_FOUND")
+
+        customer = await self.db.get(Customer, payload.customer_id)
+        if customer is None:
+            raise NotFoundError("Customer not found.", code="CUSTOMER_NOT_FOUND")
+
+        session, restating = await self._resolve_session_for(
+            store_id=payload.store_id, day_session_id=payload.day_session_id
+        )
+        occurred_at = payload.occurred_at or datetime.now(timezone.utc)
+        amount = _round(sum((p.amount for p in payload.payments), start=_ZERO))
+
+        number = await self._assign_number(
+            store, occurred_at, doc_type=SaleDocType.ADVANCE
+        )
+
+        advance = Sale(
+            number=number,
+            client_uuid=payload.client_uuid,
+            occurred_at=occurred_at,
+            terminal_uuid=payload.terminal_uuid,
+            store_id=payload.store_id,
+            day_session_id=session.id,
+            customer_id=payload.customer_id,
+            status=SaleStatus.COMPLETED,
+            doc_type=SaleDocType.ADVANCE,
+            subtotal=_ZERO,
+            discount_total=_ZERO,
+            tax_total=_ZERO,
+            # No goods, so no revenue and no tax. GST on an advance is a
+            # separate question the shop's accountant answers at filing time,
+            # not something to invent here.
+            grand_total=_ZERO,
+            paid_total=amount,
+            change_due=_ZERO,
+            balance_due=-amount,
+            notes=payload.notes,
+            completed_at=datetime.now(timezone.utc),
+            created_by_user_id=user_id,
+        )
+        advance.payments = [
+            SalePayment(method=p.method, amount=p.amount, reference=p.reference)
+            for p in payload.payments
+        ]
+        self.db.add(advance)
+        await self.db.flush()
+
+        await AuditService(self.db).log(
+            action="sale.advance_received",
+            summary=f"Advance {number} from {customer.name}: ₹{amount}",
+            entity_type="sale",
+            entity_id=advance.id,
+            changes={"amount": str(amount), "customer_id": str(payload.customer_id)},
+        )
+
+        if restating:
+            await self._restate_closed_session(
+                session=session, sale_id=advance.id, user_id=user_id
+            )
+        return await self.get(advance.id)
+
+    async def customer_balance(self, customer_id: uuid.UUID) -> CustomerBalance:
+        """What this customer owes, and what the shop holds for them.
+
+        One query over balance_due, split by sign. Bills owed are positive;
+        advances and un-refunded credit notes are negative.
+        """
+        rows = await self.db.execute(
+            select(Sale.balance_due).where(
+                Sale.customer_id == customer_id,
+                Sale.status == SaleStatus.COMPLETED,
+            )
+        )
+        owed = _ZERO
+        held = _ZERO
+        for (bal,) in rows.all():
+            value = Decimal(str(bal or 0))
+            if value > _ZERO:
+                owed += value
+            else:
+                held += -value
+        return CustomerBalance(
+            customer_id=customer_id,
+            net_balance=_round(owed - held),
+            owed_by_customer=_round(owed),
+            advance_held=_round(held),
+        )
+
     async def _returned_quantities(
         self, sale_id: uuid.UUID
     ) -> dict[uuid.UUID, Decimal]:
@@ -1163,7 +1325,12 @@ class SaleService:
         seq = row.next_seq
         row.next_seq = seq + 1
         await self.db.flush()
-        # GST requires credit notes to carry their own serial series, separate
-        # from tax invoices — hence a distinct prefix AND a distinct counter.
-        prefix = "CRN" if doc_type is SaleDocType.RETURN else "INV"
+        # Each document type carries its own serial series. GST requires it for
+        # credit notes, and an advance sharing the INV counter would collide on
+        # uq_sales_number the moment a real invoice reached the same ordinal —
+        # which is exactly how this was caught.
+        prefix = {
+            SaleDocType.RETURN: "CRN",
+            SaleDocType.ADVANCE: "ADV",
+        }.get(doc_type, "INV")
         return f"{prefix}-{store.code}-{year_month}-{seq:04d}"

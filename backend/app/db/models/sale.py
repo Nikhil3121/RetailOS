@@ -54,6 +54,11 @@ class SaleDocType(str, Enum):
 
     SALE = "sale"
     RETURN = "return"
+    # Money taken before goods are given — a wedding order paid up front. It
+    # has NO lines and grand_total 0, because an advance is not revenue until
+    # something is actually delivered. The money sits as a negative
+    # balance_due, i.e. the shop owes the customer goods.
+    ADVANCE = "advance"
 
 
 class _SaleDocTypeType(TypeDecorator):

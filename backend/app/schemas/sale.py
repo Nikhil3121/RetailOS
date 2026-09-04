@@ -167,6 +167,37 @@ class SaleReturnCreate(BaseModel):
     day_session_id: uuid.UUID | None = None
 
 
+class AdvanceCreate(BaseModel):
+    """Body for `POST /sales/advances` — money in, no goods yet.
+
+    A CUSTOMER IS REQUIRED. An advance held against nobody cannot be applied to
+    a later bill or refunded, so it is money the shop can neither keep nor
+    return. There is no sensible walk-in advance.
+    """
+
+    store_id: uuid.UUID
+    customer_id: uuid.UUID
+    payments: list[SalePaymentInput] = Field(
+        min_length=1,
+        description="How the money arrived. At least one — an advance with no payment is nothing.",
+    )
+    notes: str | None = None
+    client_uuid: str | None = Field(default=None, max_length=64)
+    occurred_at: datetime | None = None
+    terminal_uuid: str | None = Field(default=None, max_length=64)
+    day_session_id: uuid.UUID | None = None
+
+
+class CustomerBalance(BaseModel):
+    """What a customer owes, or is owed, right now."""
+
+    customer_id: uuid.UUID
+    # Positive = they owe the shop. Negative = the shop holds their money.
+    net_balance: Decimal
+    owed_by_customer: Decimal
+    advance_held: Decimal
+
+
 class SaleLineReturnable(BaseModel):
     """How much of one invoice line can still be credited."""
 

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFieldArray, useForm } from "react-hook-form";
 import {
+  Grid3x3,
   ArrowLeft,
   Image as ImageIcon,
   Plus,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
+import { VariantMatrix } from "@/components/catalog/VariantMatrix";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Input } from "@/components/ui/Input";
@@ -111,8 +113,10 @@ export function ProductEditor(): JSX.Element {
     handleSubmit,
     control,
     reset,
+    watch,
     formState: { errors },
   } = form;
+  const [matrixOpen, setMatrixOpen] = useState(false);
   const { fields, append, remove } = useFieldArray({
     control,
     name: "variants",
@@ -502,6 +506,19 @@ export function ProductEditor(): JSX.Element {
             </GlassCard>
           ))}
 
+          {/* The matrix is only offered on a NEW product. On an existing one
+              each variant must be created server-side one at a time, and
+              generating twenty rows that then fail halfway would leave the
+              catalog in a state nobody asked for. */}
+          {isNew && (
+            <Button
+              variant="secondary"
+              leadingIcon={<Grid3x3 className="h-4 w-4" />}
+              onClick={() => setMatrixOpen(true)}
+            >
+              Size / colour matrix
+            </Button>
+          )}
           <Button
             variant="secondary"
             leadingIcon={<Plus className="h-4 w-4" />}
@@ -547,6 +564,26 @@ export function ProductEditor(): JSX.Element {
           </div>
         </GlassCard>
       )}
+
+      <VariantMatrix
+        open={matrixOpen}
+        onClose={() => setMatrixOpen(false)}
+        productName={watch("name")}
+        skuPrefix={
+          (watch("name") || "SKU").replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 6) ||
+          "SKU"
+        }
+        onGenerate={(generated) => {
+          // Replace the placeholder default row rather than leaving an empty
+          // "Default Variant" sitting beside twenty real ones.
+          const onlyPlaceholder =
+            fields.length === 1 &&
+            !watch("variants.0.barcode") &&
+            watch("variants.0.name") === "Default Variant";
+          if (onlyPlaceholder) remove(0);
+          generated.forEach((v) => append(v));
+        }}
+      />
     </div>
   );
 }

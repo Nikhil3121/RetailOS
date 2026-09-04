@@ -22,6 +22,7 @@ from app.db.models.commission import (
     TargetPeriod,
 )
 from app.db.models.coupon import Coupon, CouponDiscountType, CouponRedemption
+from app.db.models.bundle import ProductBundleItem
 from app.db.models.customer import Customer
 from app.db.models.price_list import PriceList, PriceListItem
 from app.db.models.day_session import DaySession, DayStatus
@@ -69,6 +70,7 @@ __all__ = [
     "CouponDiscountType",
     "CouponRedemption",
     "Customer",
+    "ProductBundleItem",
     "PriceList",
     "PriceListItem",
     "DaySession",

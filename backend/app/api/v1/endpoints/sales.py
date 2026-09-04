@@ -12,6 +12,8 @@ from app.db.models.sale import SaleStatus
 from app.db.models.user import UserRole
 from app.schemas.common import Page
 from app.schemas.sale import (
+    AdvanceCreate,
+    CustomerBalance,
     SaleCreate,
     SaleLineReturnable,
     SalePaymentCollect,
@@ -174,3 +176,32 @@ async def create_return(
     """
     credit = await SaleService(db).create_return(sale_id, payload, user_id=user.id)
     return SaleRead.model_validate(credit)
+
+
+@router.post(
+    "/advances",
+    response_model=SaleRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Record money taken before goods are given.",
+    dependencies=[Depends(require_min_role(UserRole.CASHIER))],
+)
+async def create_advance(
+    payload: AdvanceCreate, db: DbSession, user: CurrentUser
+) -> SaleRead:
+    """An advance is not revenue — nothing has been delivered.
+
+    It is stored with no lines, grand_total 0, and a NEGATIVE balance_due, so
+    the shop's books show it as money held against future goods rather than as
+    a sale. The service audits it; no second entry is written here.
+    """
+    advance = await SaleService(db).create_advance(payload, user_id=user.id)
+    return SaleRead.model_validate(advance)
+
+
+@router.get(
+    "/customers/{customer_id}/balance",
+    response_model=CustomerBalance,
+    summary="What this customer owes, and what the shop holds for them.",
+)
+async def customer_balance(customer_id: uuid.UUID, db: DbSession) -> CustomerBalance:
+    return await SaleService(db).customer_balance(customer_id)
