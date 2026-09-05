@@ -158,6 +158,40 @@ describe('receipt content', () => {
     expect(formatReceipt(noSaving, {}).filter((l) => l.includes('MRP'))).toHaveLength(0);
   });
 
+  // ---- the shop's own identity on the paper ----------------------------
+  //
+  // These print from the LOCAL store snapshot. Until migration 008 there was
+  // nothing to read, so a real customer's receipt carried no GSTIN — which is
+  // the field that makes the paper a tax invoice rather than a note.
+
+  it('prints the shop name, address and GSTIN', () => {
+    const text = formatReceiptText(sale(), {
+      shop: {
+        name: 'M.S. Mall',
+        addressLines: ['Thana Road', 'Madanpur'],
+        gstin: '09ABCDE1234F1Z5',
+        phone: '9876543210',
+      },
+    });
+    expect(text).toContain('M.S. MALL');
+    expect(text).toContain('Thana Road');
+    expect(text).toContain('Madanpur');
+    expect(text).toContain('09ABCDE1234F1Z5');
+    expect(text).toContain('9876543210');
+  });
+
+  it('prints the shop’s own closing message when it has one', () => {
+    const text = formatReceiptText(sale(), {
+      shop: { name: 'M.S. Mall', footer: 'M.S. wishes you a happy Holi' },
+    });
+    expect(text).toContain('M.S. wishes you a happy Holi');
+  });
+
+  it('falls back to a plain thank-you when no message is set', () => {
+    const text = formatReceiptText(sale(), { shop: { name: 'M.S. Mall' } });
+    expect(text).toContain('Thank you');
+  });
+
   it('carries the offline reference and marks the invoice as pending', () => {
     const text = formatReceiptText(sale(), { showOfflineNotice: true });
     expect(text).toContain('OFFLINE-T1-000042');

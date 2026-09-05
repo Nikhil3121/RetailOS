@@ -6,7 +6,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import DbSession, require_min_role
+from app.api.deps import DbSession, require_elevation, require_min_role
 from app.db.models.user import UserRole
 from app.schemas.common import Page
 from app.schemas.customer import CustomerCreate, CustomerRead, CustomerUpdate
@@ -68,7 +68,7 @@ async def update_customer(
 @router.delete(
     "/{customer_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_min_role(UserRole.MANAGER))],
+    dependencies=[Depends(require_elevation), Depends(require_min_role(UserRole.MANAGER))],
 )
 async def delete_customer(customer_id: uuid.UUID, db: DbSession) -> None:
     await CustomerService(db).delete(customer_id)

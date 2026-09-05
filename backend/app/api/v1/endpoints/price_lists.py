@@ -6,7 +6,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import CurrentUser, DbSession, require_min_role
+from app.api.deps import CurrentUser, DbSession, require_elevation, require_min_role
 from app.db.models.user import UserRole
 from app.schemas.price_list import (
     PriceListCreate,
@@ -114,7 +114,7 @@ async def set_items(
     "/{price_list_id}/items/{variant_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Drop a rate so the variant falls back to its own selling price.",
-    dependencies=[Depends(require_min_role(UserRole.MANAGER))],
+    dependencies=[Depends(require_elevation), Depends(require_min_role(UserRole.MANAGER))],
 )
 async def remove_item(
     price_list_id: uuid.UUID, variant_id: uuid.UUID, db: DbSession

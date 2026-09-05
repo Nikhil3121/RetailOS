@@ -33,6 +33,63 @@ from app.db.session import SessionLocal
 from app.services.seed import seed_default_expense_categories
 
 
+#: Values that must never sign a real token. `change-me` is the shipped default
+#: in `config.py`, so it is in the public repository and known to everyone.
+_UNSAFE_SIGNING_KEYS = {"change-me", "changeme", "secret", "test", "dev", ""}
+
+#: Substrings that mark a key as copied rather than generated.
+#:
+#: A length check alone is not enough: `.env.example` ships
+#: "change-me-in-real-deployments-please-generate-a-64-byte-urlsafe-token",
+#: which is 68 characters and would sail past any minimum. It is also the single
+#: most likely value to reach production, because copying `.env.example` to
+#: `.env` is exactly what a deployer does first.
+_PLACEHOLDER_MARKERS = ("change", "example", "placeholder", "your-", "xxx", "generate-a-")
+
+#: 32 characters ≈ 192 bits at base64 density. Comfortably past brute force,
+#: and what `openssl rand -hex 32` produces without anyone having to think.
+_MIN_SIGNING_KEY_LENGTH = 32
+
+
+def _assert_signing_key_is_safe(settings) -> None:  # noqa: ANN001 — Settings, avoiding a cycle
+    """Refuse to start a production server whose JWTs anyone could forge.
+
+    `SECRET_KEY` signs every access token. Booting production with the default
+    is not a weak configuration, it is NO AUTHENTICATION: anyone who has read
+    this repository can mint a token for any user id and call any endpoint as
+    the owner. Nothing else in the system detects that, because the forged token
+    is cryptographically valid.
+
+    This is the one setting worth refusing to boot over. A shop whose server
+    will not start phones for help within minutes; a shop whose server started
+    with a public signing key finds out much later and much worse. Every other
+    misconfiguration here degrades safely and only warns.
+
+    Development and test are left alone so the default keeps `docker compose up`
+    and the test suite working with no setup.
+    """
+    if not settings.is_production:
+        return
+
+    key = settings.secret_key.get_secret_value()
+    normalised = key.strip().lower()
+
+    if normalised in _UNSAFE_SIGNING_KEYS or any(
+        marker in normalised for marker in _PLACEHOLDER_MARKERS
+    ):
+        raise RuntimeError(
+            "SECRET_KEY still looks like a placeholder in a production "
+            "environment. Every authentication token would be forgeable by "
+            "anyone who has seen this repository. "
+            "Set SECRET_KEY to a real random secret, e.g. `openssl rand -hex 32`."
+        )
+    if len(key) < _MIN_SIGNING_KEY_LENGTH:
+        raise RuntimeError(
+            f"SECRET_KEY is only {len(key)} characters. Use at least "
+            f"{_MIN_SIGNING_KEY_LENGTH}, e.g. `openssl rand -hex 32`."
+        )
+
+
 def create_app() -> FastAPI:
     """Build and wire the FastAPI application."""
     settings = get_settings()
@@ -75,11 +132,18 @@ def create_app() -> FastAPI:
         redirect_slashes=False,
     )
 
+    # A production deployment must never sign tokens with a key anyone can read.
+    _assert_signing_key_is_safe(settings)
+
     # -- Middleware (added in reverse execution order) ----------------------
-    # CORS — refuse to boot production with a wildcard origin. A permissive
-    # `*` on a real deployment lets any site drive an authenticated request
-    # from a victim's browser (CSRF-style), so we fail loud instead of
-    # silently allowing it.
+    # CORS — a permissive `*` on a real deployment lets any site drive an
+    # authenticated request from a victim's browser (CSRF-style).
+    #
+    # This WARNS rather than refusing, deliberately: browsers already reject
+    # `*` combined with credentials, so the practical blast radius is small,
+    # and hard-failing here would take a running shop offline over a setting
+    # that degrades safely. The signing key above is the opposite case — a
+    # known key is silently exploitable — so that one does refuse.
     if settings.cors_origins:
         if settings.is_production and "*" in settings.cors_origins:
             log.warning(

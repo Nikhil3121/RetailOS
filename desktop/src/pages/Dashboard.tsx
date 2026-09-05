@@ -35,6 +35,7 @@ import {
   type Period,
 } from '@/lib/dashboard-api';
 import { listStores } from '@/lib/stores-api';
+import { formatMoney, formatPercent, sumDecimals } from '@/lib/money';
 import { useAuthStore } from '@/stores/auth-store';
 
 const SECTIONS: DashboardSection[] = [
@@ -78,12 +79,19 @@ export function Dashboard(): JSX.Element {
 
   const kpis = dashQuery.data?.kpis;
 
-  const paymentTotal = dashQuery.data
-    ? Number(dashQuery.data.payment_mix.cash) +
-      Number(dashQuery.data.payment_mix.card) +
-      Number(dashQuery.data.payment_mix.upi) +
-      Number(dashQuery.data.payment_mix.other)
-    : 0;
+  // Two totals, deliberately. The EXACT one is what gets shown, summed as
+  // integers so the headline figure equals the four legend rows beneath it.
+  // The float is only ever used to work out a percentage width, which is a
+  // proportion of a chart and not a sum of money.
+  const paymentTotalExact = dashQuery.data
+    ? sumDecimals([
+        dashQuery.data.payment_mix.cash,
+        dashQuery.data.payment_mix.card,
+        dashQuery.data.payment_mix.upi,
+        dashQuery.data.payment_mix.other,
+      ])
+    : '0';
+  const paymentTotal = Number(paymentTotalExact);
 
   const daily = dashQuery.data?.daily_trend ?? [];
   const hourly = dashQuery.data?.hourly ?? [];
@@ -147,7 +155,7 @@ export function Dashboard(): JSX.Element {
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="Revenue"
-          value={kpis ? `₹${kpis.revenue.current}` : '—'}
+          value={formatMoney(kpis?.revenue.current)}
           kpi={kpis?.revenue}
           icon={IndianRupee}
           accent="cobalt"
@@ -163,7 +171,7 @@ export function Dashboard(): JSX.Element {
         />
         <KpiCard
           label="Avg order value"
-          value={kpis ? `₹${kpis.average_order_value.current}` : '—'}
+          value={formatMoney(kpis?.average_order_value.current)}
           kpi={kpis?.average_order_value}
           icon={ShoppingBag}
         />
@@ -181,7 +189,7 @@ export function Dashboard(): JSX.Element {
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="Est. profit"
-          value={kpis ? `₹${kpis.estimated_profit.current}` : '—'}
+          value={formatMoney(kpis?.estimated_profit.current)}
           kpi={kpis?.estimated_profit}
           icon={TrendingUp}
           accent="emerald"
@@ -189,22 +197,27 @@ export function Dashboard(): JSX.Element {
         />
         <KpiCard
           label="Est. margin"
-          value={kpis ? `${kpis.estimated_margin_pct.current}%` : '—'}
+          value={formatPercent(kpis?.estimated_margin_pct.current)}
           kpi={kpis?.estimated_margin_pct}
           icon={Percent}
           accent="emerald"
         />
         <KpiCard
           label="Tax collected"
-          value={kpis ? `₹${kpis.tax_collected.current}` : '—'}
+          value={formatMoney(kpis?.tax_collected.current)}
           kpi={kpis?.tax_collected}
           icon={Receipt}
+          // Money owed to the government, not takings. Up is not a win and
+          // down is not a loss, so it gets no colour either way.
+          direction="neutral"
         />
         <KpiCard
           label="Discounts given"
-          value={kpis ? `₹${kpis.discounts_given.current}` : '—'}
+          value={formatMoney(kpis?.discounts_given.current)}
           kpi={kpis?.discounts_given}
           icon={Sparkles}
+          // Giving away less is margin kept.
+          direction="down-is-good"
         />
       </section>
       )}
@@ -229,7 +242,7 @@ export function Dashboard(): JSX.Element {
                   value: Number(h.gross_total),
                   tooltip: `${h.hour}:00–${h.hour + 1}:00 · ${h.sales_count} sales · ₹${h.gross_total}`,
                 }))}
-                formatValue={(v) => `₹${v.toFixed(0)}`}
+                formatValue={(v) => formatMoney(v, { decimals: 0 })}
                 height={180}
               />
             ) : (
@@ -239,7 +252,7 @@ export function Dashboard(): JSX.Element {
                   value: Number(d.gross_total),
                   tooltip: `${d.day} · ${d.sales_count} sales · ₹${d.gross_total}`,
                 }))}
-                formatValue={(v) => `₹${v.toFixed(0)}`}
+                formatValue={(v) => formatMoney(v, { decimals: 0 })}
                 height={180}
               />
             )}
@@ -255,7 +268,7 @@ export function Dashboard(): JSX.Element {
               size={180}
               thickness={26}
               centerLabel="Collected"
-              centerValue={`₹${paymentTotal.toFixed(0)}`}
+              centerValue={formatMoney(paymentTotalExact, { decimals: 0 })}
               slices={[
                 { label: 'Cash', value: Number(dashQuery.data?.payment_mix.cash ?? 0), colorClass: 'stroke-cobalt-400' },
                 { label: 'Card', value: Number(dashQuery.data?.payment_mix.card ?? 0), colorClass: 'stroke-aurora-400' },
@@ -428,7 +441,7 @@ function LegendRow({
         {icon} {label}
       </span>
       <span className="font-mono text-slate-100">
-        ₹{value ?? '0.00'}
+        {formatMoney(value, { fallback: '₹0.00' })}
         <span className="ml-2 text-slate-500">· {pct}%</span>
       </span>
     </li>

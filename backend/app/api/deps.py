@@ -66,6 +66,44 @@ async def get_current_user(
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
+#: Header carrying the elevation token from `POST /auth/verify-password`.
+#:
+#: A header rather than a body field so the same guard works on DELETE routes,
+#: which have no body to put it in.
+ELEVATION_HEADER = "X-Elevation-Token"
+
+
+async def require_elevation(request: Request, user: CurrentUser) -> User:
+    """Demand that the caller re-entered their password moments ago.
+
+    This is the SERVER half of the confirm-with-password dialog. A prompt drawn
+    only in the renderer stops nobody: the endpoint is reachable directly, and
+    an unattended till with a logged-in session is exactly the situation the
+    shop wanted protected. So the check lives here, where it cannot be skipped.
+
+    Two conditions, both required:
+      * a valid, unexpired elevation token, and
+      * that token naming THE SAME user as the access token.
+
+    The second is what stops a manager's five-minute window being borrowed by
+    whoever sits down at the terminal next.
+    """
+    raw = request.headers.get(ELEVATION_HEADER)
+    if not raw:
+        raise AuthenticationError(
+            "Confirm your password to continue.",
+            code="ELEVATION_REQUIRED",
+        )
+
+    payload = decode_token(raw, expected_type=TokenType.ELEVATION)
+    if str(payload.get("sub")) != str(user.id):
+        raise AuthenticationError(
+            "Confirm your password to continue.",
+            code="ELEVATION_MISMATCH",
+        )
+    return user
+
+
 def require_role(*allowed: UserRole) -> Callable[[User], User]:
     """Route-level guard: only users with one of `allowed` roles may proceed.
 

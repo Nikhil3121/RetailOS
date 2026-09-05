@@ -21,6 +21,7 @@ import { ipcMain } from 'electron';
 import { catalogSyncService } from '../catalog/catalog-sync-service';
 import { backupScheduler, checkIntegrity, createBackup, listBackups, verifyBackup } from '../database/backup-service';
 import { describeMissingDriver, printerService } from '../printing/printer-service';
+import type { ShopDetails } from '../printing/receipt-formatter';
 import { saleSyncService } from '../sync/sale-sync-service';
 import { requireDatabase } from '../database/connection';
 import { databaseService } from '../database/database-service';
@@ -66,6 +67,34 @@ function assertReady(): void {
   if (!databaseService.isReady()) {
     throw new Error('Database is not ready.');
   }
+}
+
+/**
+ * Build the receipt header from the locally cached store.
+ *
+ * Returns undefined when the store has never been snapshotted, which leaves the
+ * formatter on its existing default. A bare header is bad; a THROW here would
+ * be worse — it would refuse to print a receipt for a sale that is already
+ * committed and a customer who is already waiting.
+ */
+function shopFor(serverStoreId: string | null): ShopDetails | undefined {
+  if (!serverStoreId) return undefined;
+  const store = databaseService.stores().findByServerId(serverStoreId);
+  if (!store) return undefined;
+
+  return {
+    name: store.name,
+    // The server keeps the address as one free-text block. Splitting on real
+    // line breaks preserves the layout the manager typed instead of collapsing
+    // a three-line address into one wrapped run.
+    addressLines: (store.address ?? '')
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean),
+    gstin: store.gstin,
+    phone: store.phone,
+    footer: store.receiptMessage ?? undefined,
+  };
 }
 
 export function registerDatabaseIpc(): void {
@@ -314,6 +343,32 @@ export function registerDatabaseIpc(): void {
     }
   });
 
+  // ---- store snapshot ----
+  //
+  // The renderer is the only side that is authenticated, so it is the only side
+  // that can read the store from the server. It hands the result down here to
+  // be written to SQLite, and the PRINTER reads it back from SQLite — which is
+  // what lets a receipt carry the shop's GSTIN with no network at all.
+
+  ipcMain.handle(
+    'store:snapshot',
+    wrap('store:snapshot', (raw) => {
+      assertReady();
+      const input = requireObject(raw, 'store');
+      return databaseService.stores().snapshot({
+        serverId: requireUuid(input.serverId, 'serverId'),
+        code: requireString(input.code, 'code', 32),
+        name: requireString(input.name, 'name', 128),
+        gstin: optionalString(input.gstin, 'gstin', 15),
+        address: optionalString(input.address, 'address', 512),
+        phone: optionalString(input.phone, 'phone', 32),
+        // 280 to match stores.receipt_message on the server exactly. A shorter
+        // cap here would silently print less than the manager saved.
+        receiptMessage: optionalString(input.receiptMessage, 'receiptMessage', 280),
+      });
+    }),
+  );
+
   // ---- printing ----
   //
   // Hardware stays in the main process. The renderer sends a sale id and gets
@@ -367,6 +422,10 @@ export function registerDatabaseIpc(): void {
           ? undefined
           : requireOneOf(options.width, 'width', ['58mm', '80mm'] as const),
         openDrawer: options.openDrawer === true,
+        // Read from the LOCAL snapshot, not from the renderer or the network.
+        // A receipt without the shop's GSTIN is not a tax invoice, and the one
+        // moment it must not go missing is the moment the connection does.
+        shop: shopFor(sale.serverStoreId),
       });
       return { ok: true, data: result };
     } catch (err) {

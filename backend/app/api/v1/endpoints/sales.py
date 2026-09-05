@@ -7,7 +7,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import CurrentUser, DbSession, require_min_role
+from app.api.deps import CurrentUser, DbSession, require_elevation, require_min_role
 from app.db.models.sale import SaleStatus
 from app.db.models.user import UserRole
 from app.schemas.common import Page
@@ -127,7 +127,10 @@ async def collect_sale_payment(
     "/{sale_id}/void",
     response_model=SaleRead,
     summary="Void a completed sale — reverses stock movements.",
-    dependencies=[Depends(require_min_role(UserRole.MANAGER))],
+    # Password-gated with the deletes. Voiding is the most consequential thing
+    # anyone can do from the till: it reverses stock AND removes takings from
+    # the day's figures, which is precisely the shape of an inside loss.
+    dependencies=[Depends(require_elevation), Depends(require_min_role(UserRole.MANAGER))],
 )
 async def void_sale(
     sale_id: uuid.UUID,

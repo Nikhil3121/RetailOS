@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { Plus, Search, Truck } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { ConfirmWithPassword } from '@/components/ui/ConfirmWithPassword';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
@@ -153,12 +153,11 @@ export function Suppliers(): JSX.Element {
         }}
       />
 
-      <ConfirmDialog
+      <ConfirmWithPassword
         open={Boolean(confirmDelete)}
         onClose={() => setConfirmDelete(null)}
         title="Delete supplier"
         description={`Delete "${confirmDelete?.name}"? Any linked purchase orders will refuse to update further.`}
-        destructive
         confirmLabel="Delete"
         onConfirm={async () => { if (confirmDelete) await remove.mutateAsync(confirmDelete); }}
       />

@@ -48,6 +48,8 @@ import {
   type SalePaymentInput,
 } from '@/lib/sales-api';
 import { listStores } from '@/lib/stores-api';
+import { snapshotStores } from '@/lib/store-snapshot';
+import { LoyaltyChip } from '@/components/billing/LoyaltyChip';
 import { resolvePrices, type ResolvedPrice } from '@/lib/price-lists-api';
 import { findUserByStaffCode, listUsers } from '@/lib/users-api';
 import { cn } from '@/lib/cn';
@@ -178,6 +180,15 @@ export function Billing(): JSX.Element {
   }, [storeId]);
 
   const storesQuery = useQuery({ queryKey: ['stores'], queryFn: () => listStores(1, 200) });
+
+  // Cache the shop locally so the THERMAL receipt can print its name, address
+  // and GSTIN with the network down. The main process cannot fetch this itself;
+  // this screen is the last authenticated point before a bill is printed.
+  const storeItems = storesQuery.data?.items;
+  useEffect(() => {
+    if (storeItems && storeItems.length > 0) void snapshotStores(storeItems);
+  }, [storeItems]);
+
   const customersQuery = useQuery({
     queryKey: ['customers'],
     queryFn: () => listCustomers(1, 500),
@@ -1225,6 +1236,15 @@ export function Billing(): JSX.Element {
               onChange={(e) => setCustomerId(e.target.value)}
               hint="Required only when a bill leaves an unpaid balance."
             />
+            {/*
+              Points, shown only once a customer is named.
+
+              Read-only here on purpose. Redemption is a decision with a rupee
+              consequence, and a control that could spend a balance sitting
+              beside the customer dropdown is one mis-click away from giving
+              away a discount nobody asked for.
+            */}
+            <LoyaltyChip customerId={customerId} />
             {/*
               One salesperson control, not two.
 

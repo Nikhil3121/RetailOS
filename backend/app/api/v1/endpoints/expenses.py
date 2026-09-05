@@ -7,7 +7,7 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import CurrentUser, DbSession, require_min_role
+from app.api.deps import CurrentUser, DbSession, require_elevation, require_min_role
 from app.db.models.expense import ExpenseStatus
 from app.db.models.user import UserRole
 from app.schemas.common import Page
@@ -94,7 +94,7 @@ async def update_category(
 @router.delete(
     "/categories/{cat_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_min_role(UserRole.OWNER))],
+    dependencies=[Depends(require_elevation), Depends(require_min_role(UserRole.OWNER))],
 )
 async def delete_category(cat_id: uuid.UUID, db: DbSession) -> None:
     await ExpenseCategoryService(db).delete(cat_id)
@@ -174,7 +174,7 @@ async def update_expense(
 @router.delete(
     "/{expense_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_min_role(UserRole.CASHIER))],
+    dependencies=[Depends(require_elevation), Depends(require_min_role(UserRole.CASHIER))],
 )
 async def delete_expense(expense_id: uuid.UUID, db: DbSession) -> None:
     await ExpenseService(db).delete(expense_id)

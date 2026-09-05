@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { ConfirmWithPassword } from '@/components/ui/ConfirmWithPassword';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
@@ -294,12 +294,11 @@ export function Expenses(): JSX.Element {
         }}
       />
 
-      <ConfirmDialog
+      <ConfirmWithPassword
         open={Boolean(confirmDelete)}
         onClose={() => setConfirmDelete(null)}
         title="Delete expense"
         description={`Delete ${confirmDelete?.number}? Only DRAFT or REJECTED expenses can be deleted.`}
-        destructive
         confirmLabel="Delete"
         onConfirm={async () => { if (confirmDelete) await remove.mutateAsync(confirmDelete); }}
       />

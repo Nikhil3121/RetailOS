@@ -24,6 +24,7 @@ import { migration004 } from './004-server-store-ref';
 import { migration005 } from './005-sync-payload';
 import { migration006 } from './006-sync-outcome';
 import { migration007 } from './007-session-attribution';
+import { migration008 } from './008-store-receipt';
 import type { Migration } from './types';
 
 export type { Migration } from './types';
@@ -37,6 +38,7 @@ export const MIGRATIONS: Migration[] = [
   migration005,
   migration006,
   migration007,
+  migration008,
 ];
 
 function ensureTrackingTable(db: Db): void {

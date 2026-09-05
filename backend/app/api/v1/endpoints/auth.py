@@ -11,10 +11,13 @@ from fastapi import APIRouter, Request, status
 
 from app.api.deps import CurrentUser, DbSession
 from app.core.config import get_settings
+from app.core.exceptions import AuthenticationError
+from app.core.security import ELEVATION_TTL_MINUTES, create_elevation_token, verify_password
 from app.core.rate_limit import limiter as _auth_limiter
 from app.services.audit import AuditService
 from app.schemas.auth import (
     ChangePasswordRequest,
+    ElevationResponse,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
     LoginRequest,
@@ -23,6 +26,7 @@ from app.schemas.auth import (
     RefreshRequest,
     ResetPasswordRequest,
     TokenPair,
+    VerifyPasswordRequest,
 )
 from app.schemas.two_factor import (
     TwoFactorDisableRequest,
@@ -146,6 +150,52 @@ async def change_password(
         user=user,
         current_password=payload.current_password,
         new_password=payload.new_password,
+    )
+
+
+@router.post(
+    "/verify-password",
+    response_model=ElevationResponse,
+    summary="Re-enter your password to unlock a destructive action.",
+)
+@_auth_limiter.limit("10/minute")
+async def verify_password_endpoint(
+    payload: VerifyPasswordRequest,
+    user: CurrentUser,
+    db: DbSession,
+    request: Request,
+) -> ElevationResponse:
+    """Confirm the caller's own password and hand back a 5-minute elevation token.
+
+    Rate limited like a login, because that is what it is: a password guess
+    against a known account. Ten a minute leaves room for a genuine typo or two
+    without leaving the field open to a scripted run.
+
+    Both outcomes are audited. A failed confirmation is the more interesting of
+    the two — repeated failures on a till are worth someone looking at.
+    """
+    if not verify_password(payload.password, user.hashed_password):
+        await AuditService(db).log(
+            action="auth.elevation_denied",
+            summary=f"Failed password confirmation for {user.email}",
+            entity_type="user",
+            entity_id=user.id,
+            actor=user,
+        )
+        # Commit the audit row before the error unwinds the request.
+        await db.commit()
+        raise AuthenticationError("That password is not correct.", code="INVALID_PASSWORD")
+
+    await AuditService(db).log(
+        action="auth.elevation_granted",
+        summary=f"Password confirmed by {user.email}",
+        entity_type="user",
+        entity_id=user.id,
+        actor=user,
+    )
+    return ElevationResponse(
+        elevation_token=create_elevation_token(subject=str(user.id)),
+        expires_in_seconds=ELEVATION_TTL_MINUTES * 60,
     )
 
 

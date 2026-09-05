@@ -27,6 +27,25 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
+class VerifyPasswordRequest(BaseModel):
+    """Re-authenticate the person already holding this session.
+
+    No email field: this proves the person AT THE KEYBOARD is still the account
+    holder, so the identity is taken from the access token and never from the
+    body. Accepting an email here would turn a confirmation prompt into a
+    password oracle for other accounts.
+    """
+
+    password: str = Field(min_length=1, max_length=128)
+
+
+class ElevationResponse(BaseModel):
+    """Short-lived proof of re-authentication, for destructive actions."""
+
+    elevation_token: str
+    expires_in_seconds: int
+
+
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 

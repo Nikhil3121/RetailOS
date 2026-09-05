@@ -6,7 +6,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import DbSession, require_min_role
+from app.api.deps import DbSession, require_elevation, require_min_role
 from app.db.models.user import UserRole
 from app.schemas.common import Page
 from app.schemas.coupon import (
@@ -74,7 +74,7 @@ async def update_coupon(
 @router.delete(
     "/{coupon_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_min_role(UserRole.OWNER))],
+    dependencies=[Depends(require_elevation), Depends(require_min_role(UserRole.OWNER))],
 )
 async def delete_coupon(coupon_id: uuid.UUID, db: DbSession) -> None:
     await CouponService(db).delete(coupon_id)

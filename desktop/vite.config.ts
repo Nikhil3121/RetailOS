@@ -28,6 +28,22 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    sourcemap: true,
+    // Source maps are OPT-IN for packaged builds.
+    //
+    // `sourcemap: true` shipped a 4.2 MB map inside every installer, which put
+    // the app's complete original source on the client's machine — readable by
+    // anyone who opens the DevTools this app deliberately leaves available for
+    // support. It also made the installer meaningfully larger for no benefit
+    // the shop ever sees.
+    //
+    // Support builds still want them, so set RETAILOS_SOURCEMAP=1 to produce a
+    // diagnosable build. Dev is unaffected: `vite` serves maps regardless of
+    // this setting, which only applies to `vite build`.
+    sourcemap: process.env.RETAILOS_SOURCEMAP === '1',
+    // The renderer is one ~1 MB chunk. That is fine here and deliberately not
+    // code-split: this is a desktop app loading from the local filesystem, not
+    // a website paying for each byte over a network, and a cashier opening the
+    // till must never wait on a lazily-fetched route chunk.
+    chunkSizeWarningLimit: 1500,
   },
 });

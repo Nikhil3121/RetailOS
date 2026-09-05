@@ -13,6 +13,7 @@
  *   call sites can branch on `.code` without reparsing bodies.
  */
 
+import { elevationHeader } from '@/lib/elevation';
 import { useAuthStore } from '@/stores/auth-store';
 
 export const API_BASE_URL =
@@ -176,6 +177,13 @@ async function attempt<T>({
             Authorization: `Bearer ${token}`,
           }
         : {}),
+
+      // Sent whenever one is held and still live. Attaching it to every
+      // request rather than only to the gated ones keeps the 18 delete call
+      // sites from each having to know about it — and it costs nothing, since
+      // the server ignores the header everywhere except the routes that
+      // demand it.
+      ...(auth ? elevationHeader() : {}),
 
       ...headers,
     },

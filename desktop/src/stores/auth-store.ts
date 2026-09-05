@@ -13,6 +13,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
 import { fetchMe, logout as apiLogout, refreshTokens } from '@/lib/auth-api';
+import { clearElevation } from '@/lib/elevation';
 import { ApiError } from '@/lib/api';
 import type { CurrentUser, TokenPair, UserRole } from '@/types/auth';
 import { hasMinRole } from '@/types/auth';
@@ -96,6 +97,9 @@ export const useAuthStore = create<AuthState>()(
         // status leak through — Login.tsx sees it and bounces the user back to
         // /dashboard before the server response returns.
         set({ accessToken: null, refreshToken: null, user: null, status: 'guest' });
+        // The unlock belongs to the person who typed the password. Signing out
+        // must not leave it lying around for whoever signs in next.
+        clearElevation();
         if (refreshToken) {
           try {
             await apiLogout(refreshToken);

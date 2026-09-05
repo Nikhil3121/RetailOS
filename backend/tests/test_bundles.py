@@ -12,7 +12,7 @@ from decimal import Decimal
 
 from httpx import AsyncClient
 
-from tests._helpers import auth, login
+from tests._helpers import auth, elevate, login
 
 
 async def _shop(client: AsyncClient) -> dict:
@@ -45,7 +45,7 @@ async def _shop(client: AsyncClient) -> dict:
         "store_id": store_id, "reason": "OPENING BALANCE",
         "lines": [{"variant_id": ids["SAR"], "delta": "10.000"},
                   {"variant_id": ids["BLS"], "delta": "10.000"}]})
-    return {"h": h, "store_id": store_id, **ids}
+    return {"h": h, "token": token, "store_id": store_id, **ids}
 
 
 async def _make_bundle(client: AsyncClient, shop: dict, components: list[dict]):
@@ -172,7 +172,8 @@ async def test_clearing_a_bundle_makes_it_an_ordinary_product(client: AsyncClien
     shop = await _shop(client)
     await _make_bundle(client, shop, [
         {"component_variant_id": shop["SAR"], "quantity": "1.000"}])
-    r = await client.delete(f"/api/v1/bundles/{shop['COMBO']}", headers=shop["h"])
+    r = await client.delete(f"/api/v1/bundles/{shop['COMBO']}",
+                            headers=await elevate(client, shop["token"]))
     assert r.status_code == 204, r.text
 
     r = await client.get(f"/api/v1/bundles/{shop['COMBO']}", headers=shop["h"])

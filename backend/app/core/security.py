@@ -55,6 +55,11 @@ class TokenType(str, Enum):
     ACCESS = "access"
     RESET = "reset"
     CHALLENGE = "2fa_challenge"
+    # Proof that the person at the keyboard re-entered their password just now.
+    # A SEPARATE type from ACCESS on purpose: if an access token could satisfy
+    # an elevation check, every gated route would be open to anyone holding a
+    # session, and the gate would protect nothing.
+    ELEVATION = "elevation"
 
 
 def _encode(payload: dict[str, Any], expires_delta: timedelta, token_type: TokenType) -> str:
@@ -91,6 +96,22 @@ def create_2fa_challenge_token(*, subject: str) -> str:
     """Issue a very short-lived (5 min) token that gates the second step of a
     2FA login — carries the user id but no session privileges of its own."""
     return _encode({"sub": subject}, timedelta(minutes=5), TokenType.CHALLENGE)
+
+
+#: How long a re-entered password stays good for.
+#:
+#: Long enough to delete a handful of rows without retyping, short enough that
+#: a till left unattended is not a standing authorisation to destroy records.
+ELEVATION_TTL_MINUTES = 5
+
+
+def create_elevation_token(*, subject: str) -> str:
+    """Issue proof that `subject` re-entered their password moments ago.
+
+    Carries no privileges of its own — it is only ever checked ALONGSIDE a
+    valid access token, and the two must name the same user.
+    """
+    return _encode({"sub": subject}, timedelta(minutes=ELEVATION_TTL_MINUTES), TokenType.ELEVATION)
 
 
 def decode_token(token: str, *, expected_type: TokenType) -> dict[str, Any]:

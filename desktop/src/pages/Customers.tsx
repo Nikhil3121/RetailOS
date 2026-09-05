@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { Plus, Search, UserRound } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { ConfirmWithPassword } from '@/components/ui/ConfirmWithPassword';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
@@ -172,12 +172,11 @@ export function Customers(): JSX.Element {
         }}
       />
 
-      <ConfirmDialog
+      <ConfirmWithPassword
         open={Boolean(confirmDelete)}
         onClose={() => setConfirmDelete(null)}
         title="Delete customer"
         description={`Delete "${confirmDelete?.name}"? Their purchase history stays visible on old invoices but the profile disappears.`}
-        destructive
         confirmLabel="Delete"
         onConfirm={async () => { if (confirmDelete) await remove.mutateAsync(confirmDelete); }}
       />

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Boxes, Filter, Plus, Search } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { ConfirmWithPassword } from '@/components/ui/ConfirmWithPassword';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Input } from '@/components/ui/Input';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -211,12 +211,11 @@ export function Products(): JSX.Element {
         }
       />
 
-      <ConfirmDialog
+      <ConfirmWithPassword
         open={Boolean(confirmDelete)}
         onClose={() => setConfirmDelete(null)}
         title="Delete product"
         description={`Delete "${confirmDelete?.name}" and every variant? This cannot be undone.`}
-        destructive
         confirmLabel="Delete"
         onConfirm={async () => {
           if (confirmDelete) await remove.mutateAsync(confirmDelete);

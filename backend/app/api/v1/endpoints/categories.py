@@ -6,7 +6,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import DbSession, require_min_role
+from app.api.deps import DbSession, require_elevation, require_min_role
 from app.db.models.user import UserRole
 from app.schemas.category import (
     CategoryCreate,
@@ -78,7 +78,7 @@ async def update_category(cat_id: uuid.UUID, payload: CategoryUpdate, db: DbSess
 @router.delete(
     "/{cat_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_min_role(UserRole.OWNER))],
+    dependencies=[Depends(require_elevation), Depends(require_min_role(UserRole.OWNER))],
 )
 async def delete_category(cat_id: uuid.UUID, db: DbSession) -> None:
     await CategoryService(db).delete(cat_id)

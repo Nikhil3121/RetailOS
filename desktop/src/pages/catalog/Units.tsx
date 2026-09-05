@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { Plus, Ruler } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { ConfirmWithPassword } from '@/components/ui/ConfirmWithPassword';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
@@ -125,12 +125,11 @@ export function Units(): JSX.Element {
         }}
       />
 
-      <ConfirmDialog
+      <ConfirmWithPassword
         open={Boolean(confirmDelete)}
         onClose={() => setConfirmDelete(null)}
         title="Delete unit"
         description={`Delete unit "${confirmDelete?.name}"? Products using this unit will refuse the change until reassigned.`}
-        destructive
         confirmLabel="Delete"
         onConfirm={async () => {
           if (confirmDelete) await remove.mutateAsync(confirmDelete);

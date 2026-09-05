@@ -14,7 +14,7 @@ import {
 
 import { Button } from "@/components/ui/Button";
 import { VariantMatrix } from "@/components/catalog/VariantMatrix";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { ConfirmWithPassword } from "@/components/ui/ConfirmWithPassword";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -704,12 +704,11 @@ function ImagesTab({ productId }: { productId: string }): JSX.Element {
         )}
       </div>
 
-      <ConfirmDialog
+      <ConfirmWithPassword
         open={Boolean(confirmDelete)}
         onClose={() => setConfirmDelete(null)}
         title="Remove image"
         description="This only removes the URL reference — the actual image at the URL is untouched."
-        destructive
         confirmLabel="Remove"
         onConfirm={async () => {
           if (confirmDelete) await remove.mutateAsync(confirmDelete.id);

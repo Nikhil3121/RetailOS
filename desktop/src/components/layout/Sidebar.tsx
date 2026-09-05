@@ -135,6 +135,7 @@ const NAV_GROUPS: NavGroup[] = [
     minRole: 'manager',
     items: [
       { label: 'Coupons', to: '/coupons', icon: TicketPercent, minRole: 'manager' },
+      { label: 'Loyalty', to: '/loyalty', icon: Award, minRole: 'manager' },
       { label: 'Campaigns', to: '/campaigns', icon: Megaphone, minRole: 'manager' },
     ],
   },

@@ -7,7 +7,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import DbSession, require_min_role
+from app.api.deps import DbSession, require_elevation, require_min_role
 from app.db.models.user import UserRole
 from app.schemas.commission import (
     CommissionLine,
@@ -82,7 +82,7 @@ async def update_rule(
 @router.delete(
     "/rules/{rule_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_min_role(UserRole.OWNER))],
+    dependencies=[Depends(require_elevation), Depends(require_min_role(UserRole.OWNER))],
 )
 async def delete_rule(rule_id: uuid.UUID, db: DbSession) -> None:
     await CommissionRuleService(db).delete(rule_id)

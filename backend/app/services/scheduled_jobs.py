@@ -14,6 +14,7 @@ from app.db.models.notification import NotificationKind, NotificationSeverity
 from app.db.session import session_scope
 from app.schemas.inventory_intelligence import StockCategory
 from app.services.inventory_intelligence import InventoryIntelligenceService
+from app.services.loyalty import LoyaltyService
 from app.services.notification import NotificationService
 
 log = get_logger("scheduler")
@@ -129,3 +130,23 @@ def _low_stock_body(alerts) -> str:
     ]
     tail = "" if len(alerts) < 10 else "\n… and more; check Inventory health for the full list."
     return "\n".join(lines) + tail
+
+
+async def loyalty_expiry_sweep() -> None:
+    """Lapse reward points whose expiry date has passed.
+
+    Runs daily rather than on demand. Points expiry is the shop reducing a
+    liability it has already booked, and a customer must never be told a
+    different balance by two screens because one of them happened to trigger a
+    sweep and the other did not.
+
+    Idempotent, like every job here: a second run the same day finds the first
+    run's EXPIRY rows already counted and expires nothing further.
+    """
+    try:
+        async with session_scope() as db:
+            affected = await LoyaltyService(db).expire_due_points()
+            if affected:
+                log.info("loyalty.expiry_swept", customers_affected=affected)
+    except Exception as exc:  # noqa: BLE001 — a job must never kill the scheduler
+        log.error("loyalty.expiry_failed", error=str(exc))

@@ -16,7 +16,7 @@ from decimal import Decimal
 
 from httpx import AsyncClient
 
-from tests._helpers import auth, login
+from tests._helpers import auth, elevate, login
 
 
 async def _shop(client: AsyncClient) -> dict:
@@ -53,7 +53,7 @@ async def _shop(client: AsyncClient) -> dict:
     })
 
     return {
-        "h": h, "store_id": store_id,
+        "h": h, "token": token, "store_id": store_id,
         "v1": variants[0]["id"], "v2": variants[1]["id"],
     }
 
@@ -250,7 +250,8 @@ async def test_removing_a_rate_reverts_to_the_shelf_price(client: AsyncClient) -
     list_id = await _wholesale_list(client, shop, {shop["v1"]: "700.00"})
 
     r = await client.delete(
-        f"/api/v1/price-lists/{list_id}/items/{shop['v1']}", headers=shop["h"]
+        f"/api/v1/price-lists/{list_id}/items/{shop['v1']}",
+        headers=await elevate(client, shop["token"]),
     )
     assert r.status_code == 204, r.text
 

@@ -7,7 +7,11 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.services.scheduled_jobs import day_close_reminder, low_stock_scan
+from app.services.scheduled_jobs import (
+    day_close_reminder,
+    low_stock_scan,
+    loyalty_expiry_sweep,
+)
 
 log = get_logger("scheduler")
 
@@ -38,6 +42,16 @@ def start_scheduler() -> None:
         trigger=IntervalTrigger(minutes=settings.scheduler_day_close_interval_minutes),
         id="day_close_reminder",
         name="Day close reminder",
+        max_instances=1,
+        coalesce=True,
+    )
+    # Daily. Expiry is a change to what the shop owes its customers, so it
+    # happens on a predictable schedule rather than whenever a screen is opened.
+    scheduler.add_job(
+        loyalty_expiry_sweep,
+        trigger=IntervalTrigger(hours=24),
+        id="loyalty_expiry_sweep",
+        name="Loyalty points expiry",
         max_instances=1,
         coalesce=True,
     )

@@ -18,7 +18,7 @@ from decimal import Decimal
 
 from httpx import AsyncClient
 
-from tests._helpers import auth, login
+from tests._helpers import auth, elevate, login
 
 
 async def _shop(client: AsyncClient) -> dict:
@@ -60,7 +60,8 @@ async def _shop(client: AsyncClient) -> dict:
     })
     assert r.status_code == 201, r.text
 
-    return {"h": h, "store_id": store_id, "variant_id": variant_id, "session_id": session_id}
+    return {"h": h, "token": token, "store_id": store_id, "variant_id": variant_id,
+            "session_id": session_id}
 
 
 async def _sell(client: AsyncClient, shop: dict, qty: str, paid: str) -> dict:
@@ -247,7 +248,8 @@ async def test_cannot_return_a_voided_sale(client: AsyncClient) -> None:
     shop = await _shop(client)
     sale = await _sell(client, shop, "1.000", "899.00")
 
-    r = await client.post(f"/api/v1/sales/{sale['id']}/void", headers=shop["h"],
+    r = await client.post(f"/api/v1/sales/{sale['id']}/void",
+                          headers=await elevate(client, shop["token"]),
                           json={"reason": "Rung up twice"})
     assert r.status_code == 200, r.text
 

@@ -7,7 +7,7 @@ import uuid
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 
-from app.api.deps import CurrentUser, DbSession, require_min_role
+from app.api.deps import CurrentUser, DbSession, require_elevation, require_min_role
 from app.core.exceptions import NotFoundError, ValidationError
 from app.db.models.bundle import ProductBundleItem
 from app.db.models.product import Product, ProductVariant
@@ -135,7 +135,7 @@ async def set_bundle(
     "/{bundle_variant_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Stop this variant being a bundle. It becomes an ordinary product.",
-    dependencies=[Depends(require_min_role(UserRole.MANAGER))],
+    dependencies=[Depends(require_elevation), Depends(require_min_role(UserRole.MANAGER))],
 )
 async def clear_bundle(bundle_variant_id: uuid.UUID, db: DbSession) -> None:
     rows = (

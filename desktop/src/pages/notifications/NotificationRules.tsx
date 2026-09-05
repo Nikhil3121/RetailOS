@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { Bell, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { ConfirmWithPassword } from '@/components/ui/ConfirmWithPassword';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
@@ -194,12 +194,11 @@ export function NotificationRules(): JSX.Element {
         }}
       />
 
-      <ConfirmDialog
+      <ConfirmWithPassword
         open={Boolean(confirmDelete)}
         onClose={() => setConfirmDelete(null)}
         title="Delete notification rule"
         description={`Delete "${confirmDelete?.name}"? Past notifications stay; future events for this rule stop firing.`}
-        destructive
         confirmLabel="Delete"
         onConfirm={async () => { if (confirmDelete) await remove.mutateAsync(confirmDelete); }}
       />

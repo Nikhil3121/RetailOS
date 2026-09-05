@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { Plus, Target as TargetIcon } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { ConfirmWithPassword } from '@/components/ui/ConfirmWithPassword';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
@@ -131,12 +131,11 @@ export function StaffTargets(): JSX.Element {
         }}
       />
 
-      <ConfirmDialog
+      <ConfirmWithPassword
         open={Boolean(confirmDelete)}
         onClose={() => setConfirmDelete(null)}
         title="Delete target"
         description="Deleting a target doesn't touch sales history — it only removes the goal line."
-        destructive
         confirmLabel="Delete"
         onConfirm={async () => { if (confirmDelete) await remove.mutateAsync(confirmDelete); }}
       />

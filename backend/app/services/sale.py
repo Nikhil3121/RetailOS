@@ -50,6 +50,7 @@ from app.schemas.sale import (
 from app.services.audit import AuditService
 from app.services.day_session import DaySessionService
 from app.services.inventory import InventoryService
+from app.services.loyalty import LoyaltyService
 from app.services.price_list import PriceListService
 
 
@@ -368,6 +369,21 @@ class SaleService:
             await self._restate_closed_session(
                 session=session,
                 sale_id=sale_id_placeholder,
+                user_id=user_id,
+            )
+
+        # ---- reward points ---------------------------------------------------
+        #
+        # AFTER the sale is safely stored, and only for a named customer — a
+        # walk-in has no account to credit. Earning is deliberately not inside
+        # the savepoint above: the bill is the thing that must not be lost, and
+        # a loyalty problem must never be able to fail a sale that has already
+        # taken the customer's money.
+        if payload.customer_id is not None:
+            await LoyaltyService(self.db).earn_for_sale(
+                customer_id=payload.customer_id,
+                sale_id=sale_id_placeholder,
+                amount=grand_total,
                 user_id=user_id,
             )
 
@@ -866,6 +882,14 @@ class SaleService:
         sale.void_reason = reason
         await self.db.flush()
 
+        # Take back any points this bill earned. Without it a customer could
+        # buy, collect points, have the bill voided, and keep them — the shop
+        # would have paid for a transaction that never happened.
+        await LoyaltyService(self.db).reverse_for_sale(
+            sale_id=sale.id,
+            reason=f"Void {sale.number}: {reason}",
+            user_id=user_id,
+        )
 
         return sale
 
@@ -1084,6 +1108,21 @@ class SaleService:
                 "refunded": str(refunded),
             },
         )
+
+        # ---- points come back too --------------------------------------------
+        #
+        # Proportional to the share of the bill being returned, so a customer
+        # returning one item of four keeps three quarters of what they earned.
+        # Reversing the whole lot on a partial return would punish them for a
+        # single exchange; reversing nothing would let a full return keep the
+        # points on goods the shop has back on its shelf.
+        if original.customer_id is not None and original.grand_total > _ZERO:
+            await LoyaltyService(self.db).reverse_for_sale(
+                sale_id=original.id,
+                reason=f"Return against {original.number}: {payload.reason}",
+                user_id=user_id,
+                fraction=grand_total / original.grand_total,
+            )
 
         if restating:
             await self._restate_closed_session(

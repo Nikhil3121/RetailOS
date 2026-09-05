@@ -20,6 +20,7 @@ import { CatalogRepository } from './repositories/catalog-repository';
 import { DeviceRepository, type DeviceIdentity } from './repositories/device-repository';
 import { ProductRepository } from './repositories/product-repository';
 import { SaleRepository } from './repositories/sale-repository';
+import { StoreRepository } from './repositories/store-repository';
 import { SyncRepository } from './repositories/sync-repository';
 
 export interface InitResult {
@@ -118,6 +119,12 @@ class DatabaseService {
 
   sales(db = requireDatabase()): SaleRepository {
     return new SaleRepository(db);
+  }
+
+  /** Shop details for the receipt header. Cached locally so a bill still
+   *  prints its GSTIN with the network down. */
+  stores(db = requireDatabase()): StoreRepository {
+    return new StoreRepository(db);
   }
 
   syncs(db = requireDatabase()): SyncRepository {

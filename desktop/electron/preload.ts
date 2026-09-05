@@ -63,6 +63,17 @@ const printer = {
     ipcRenderer.invoke('printer:printSale', saleId, options),
 };
 
+/**
+ * Shop details for the receipt header, cached locally.
+ *
+ * Push-only by design: the renderer records what the server told it, and the
+ * printer reads it back in the main process. Nothing here reads a store into
+ * the renderer, which already has the server for that.
+ */
+const store = {
+  snapshot: (details: unknown) => ipcRenderer.invoke('store:snapshot', details),
+};
+
 const backup = {
   list: () => ipcRenderer.invoke('backup:list'),
   verify: (file: string) => ipcRenderer.invoke('backup:verify', file),
@@ -114,6 +125,7 @@ const api = {
   printer,
   config,
   catalog,
+  store,
 } as const;
 
 contextBridge.exposeInMainWorld('retailos', api);

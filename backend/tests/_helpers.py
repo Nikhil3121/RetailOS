@@ -40,3 +40,23 @@ async def login(
 
 def auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+async def elevate(
+    client: AsyncClient,
+    token: str,
+    password: str = "test-password-1",
+) -> dict[str, str]:
+    """Auth headers PLUS proof the caller just re-entered their password.
+
+    Deletes and sale voids are password-gated, so a test that exercises one has
+    to go through the same door a cashier does. Deliberately a separate helper
+    from `auth`: if elevation came free with every request, these tests would
+    stop proving that the gate is there at all.
+    """
+    headers = auth(token)
+    r = await client.post(
+        "/api/v1/auth/verify-password", headers=headers, json={"password": password}
+    )
+    assert r.status_code == 200, r.text
+    return {**headers, "X-Elevation-Token": r.json()["elevation_token"]}

@@ -3,6 +3,7 @@
  * Kept in a separate file from the low-level fetcher so imports stay short.
  */
 import { apiRequest } from '@/lib/api';
+import { storeElevation } from '@/lib/elevation';
 import type { CurrentUser, TokenPair } from '@/types/auth';
 
 export interface LoginResponse {
@@ -123,4 +124,30 @@ export function resetPassword(resetToken: string, newPassword: string): Promise<
     body: { reset_token: resetToken, new_password: newPassword },
     auth: false,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Re-authentication for destructive actions
+// ---------------------------------------------------------------------------
+
+interface ElevationResponse {
+  elevation_token: string;
+  expires_in_seconds: number;
+}
+
+/**
+ * Confirm the signed-in user's own password, unlocking deletes and voids for a
+ * few minutes.
+ *
+ * Throws `ApiError` when the password is wrong, so the caller can show the
+ * server's own message. Nothing here decides whether a password is correct —
+ * the server holds the hash and is the only thing entitled to answer.
+ */
+export async function confirmPassword(password: string): Promise<void> {
+  const res = await apiRequest<ElevationResponse>({
+    path: '/auth/verify-password',
+    method: 'POST',
+    body: { password },
+  });
+  storeElevation(res.elevation_token, res.expires_in_seconds);
 }

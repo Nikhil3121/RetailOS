@@ -10,6 +10,7 @@ from httpx import AsyncClient
 from app.core.security import hash_password
 from app.db.models.user import User, UserRole
 from app.db.session import session_scope
+from tests._helpers import elevate
 
 
 async def _authed(client: AsyncClient) -> str:
@@ -107,7 +108,7 @@ async def test_cannot_delete_last_variant(client: AsyncClient) -> None:
 
     r = await client.delete(
         f"/api/v1/products/variants/{variant_id}",
-        headers={"Authorization": f"Bearer {token}"},
+        headers=await elevate(client, token, "owner-password-1"),
     )
     assert r.status_code == 409
     assert r.json()["error"]["code"] == "LAST_VARIANT"

@@ -13,6 +13,7 @@ import {
 
 import { Button } from '@/components/ui/Button';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { LoyaltyPanel } from '@/components/crm/LoyaltyPanel';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -104,6 +105,8 @@ export function CustomerDetail(): JSX.Element {
           )}
         </ul>
       </GlassCard>
+
+      {id && <LoyaltyPanel customerId={id} />}
 
       <div>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">

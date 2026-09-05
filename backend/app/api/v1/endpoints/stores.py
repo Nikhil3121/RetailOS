@@ -6,7 +6,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import DbSession, require_min_role
+from app.api.deps import DbSession, require_elevation, require_min_role
 from app.db.models.user import UserRole
 from app.schemas.common import Page
 from app.schemas.store import StoreCreate, StoreRead, StoreUpdate
@@ -70,7 +70,7 @@ async def update_store(store_id: uuid.UUID, payload: StoreUpdate, db: DbSession)
 @router.delete(
     "/{store_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_min_role(UserRole.OWNER))],
+    dependencies=[Depends(require_elevation), Depends(require_min_role(UserRole.OWNER))],
 )
 async def delete_store(store_id: uuid.UUID, db: DbSession) -> None:
     await StoreService(db).delete(store_id)

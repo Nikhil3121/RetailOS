@@ -18,6 +18,7 @@ import { log } from './database/logger';
 import { backupScheduler } from './database/backup-service';
 import { registerDatabaseIpc } from './ipc/register';
 import { logResolvedConfig } from './pos-config';
+import { isInternalUrl, isSafeExternalUrl, schemeOf } from './security/navigation';
 
 const isDev = !app.isPackaged;
 // Must match `server.port` in vite.config.ts. 5273 is RetailOS-specific —
@@ -140,14 +141,25 @@ async function createMainWindow(): Promise<void> {
   });
 
   // Prevent renderer-driven navigation to arbitrary origins.
+  //
+  // Both handlers hand the URL to `openExternal`, which asks the OPERATING
+  // SYSTEM to open it — so the scheme must be checked first. See
+  // `isSafeExternalUrl` for what that protects against.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    if (isSafeExternalUrl(url)) {
+      void shell.openExternal(url);
+    } else {
+      log.warn('security.blocked_window_open', { scheme: schemeOf(url) });
+    }
     return { action: 'deny' };
   });
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith(VITE_URL) && !url.startsWith('file://')) {
-      event.preventDefault();
+    if (isInternalUrl(url, VITE_URL)) return;
+    event.preventDefault();
+    if (isSafeExternalUrl(url)) {
       void shell.openExternal(url);
+    } else {
+      log.warn('security.blocked_navigation', { scheme: schemeOf(url) });
     }
   });
 

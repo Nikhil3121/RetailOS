@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { Plus, Tag } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { ConfirmWithPassword } from '@/components/ui/ConfirmWithPassword';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
@@ -141,12 +141,11 @@ export function Brands(): JSX.Element {
         }}
       />
 
-      <ConfirmDialog
+      <ConfirmWithPassword
         open={Boolean(confirmDelete)}
         onClose={() => setConfirmDelete(null)}
         title="Delete brand"
         description={`Delete brand "${confirmDelete?.name}"? Products keep their data but lose the brand assignment.`}
-        destructive
         confirmLabel="Delete"
         onConfirm={async () => {
           if (confirmDelete) await remove.mutateAsync(confirmDelete);
