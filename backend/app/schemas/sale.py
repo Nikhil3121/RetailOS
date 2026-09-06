@@ -276,6 +276,10 @@ class SaleRead(ORMModel):
     client_uuid: str | None = None
     occurred_at: datetime | None = None
     terminal_uuid: str | None = None
+    # The free gift this bill earned, if any. `reward_label` is a snapshot, so
+    # it still reads correctly after the scheme is renamed or deleted.
+    reward_scheme_id: uuid.UUID | None = None
+    reward_label: str | None = None
     lines: list[SaleLineRead] = Field(default_factory=list)
     payments: list[SalePaymentRead] = Field(default_factory=list)
     created_at: datetime

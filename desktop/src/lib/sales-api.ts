@@ -42,6 +42,10 @@ export interface SalePayment {
 }
 
 export interface Sale {
+  /** Free gift earned on this bill. Snapshotted, so it survives the
+   *  scheme being renamed or deleted. */
+  reward_label?: string | null;
+  reward_scheme_id?: string | null;
   id: string;
   number: string;
   store_id: string;

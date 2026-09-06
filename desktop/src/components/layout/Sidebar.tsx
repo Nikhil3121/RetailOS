@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   Activity,
   Award,
+  Gift,
   BarChart3,
   Bell,
   BellDot,
@@ -135,7 +136,10 @@ const NAV_GROUPS: NavGroup[] = [
     minRole: 'manager',
     items: [
       { label: 'Coupons', to: '/coupons', icon: TicketPercent, minRole: 'manager' },
-      { label: 'Loyalty', to: '/loyalty', icon: Award, minRole: 'manager' },
+      // Two neighbours that sound alike to a new cashier, so they say what
+      // they are: points accrue over time, rewards are a gift on one bill.
+      { label: 'Loyalty points', to: '/loyalty', icon: Award, minRole: 'manager' },
+      { label: 'Rewards (gifts)', to: '/rewards', icon: Gift, minRole: 'manager' },
       { label: 'Campaigns', to: '/campaigns', icon: Megaphone, minRole: 'manager' },
     ],
   },

@@ -298,6 +298,22 @@ export function Invoice(): JSX.Element {
             )}
           </section>
 
+          {/* The free gift this bill earned.
+              Printed from the bill's OWN snapshot rather than looked up, so a
+              scheme renamed or withdrawn next month cannot change what an
+              old bill says the customer was handed. Placed above the footer
+              so it is part of the bill, not part of the pleasantries. */}
+          {sale.reward_label && (
+            <section className="invoice-reward mt-6 rounded-lg border border-dashed border-slate-400 px-4 py-3 text-center">
+              <div className="text-xs uppercase tracking-wider text-slate-500">
+                Congratulations
+              </div>
+              <div className="mt-1 text-base font-semibold text-slate-800">
+                Free: {sale.reward_label}
+              </div>
+            </section>
+          )}
+
           <footer className="mt-8 border-t border-border pt-4 text-center text-xs text-slate-500">
             {/* The shop's own words, set per branch — a festival greeting, a
                 return policy. Falls back to the generic line when unset. */}

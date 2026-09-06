@@ -43,6 +43,7 @@ from app.db.models.notification import (
     NotificationSeverity,
 )
 from app.db.models.product import Product, ProductImage, ProductVariant
+from app.db.models.reward import RewardScheme
 from app.db.models.purchase import (
     PurchaseOrder,
     PurchaseOrderLine,
@@ -98,6 +99,7 @@ __all__ = [
     "NotificationSeverity",
     "PaymentMethod",
     "Product",
+    "RewardScheme",
     "ProductImage",
     "ProductVariant",
     "PurchaseOrder",

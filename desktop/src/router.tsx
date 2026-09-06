@@ -49,6 +49,7 @@ import { StaffTargets } from '@/pages/team/StaffTargets';
 import { Campaigns } from '@/pages/crm/Campaigns';
 import { Coupons } from '@/pages/crm/Coupons';
 import { Loyalty } from '@/pages/crm/Loyalty';
+import { Rewards } from '@/pages/crm/Rewards';
 import { CustomerDetail } from '@/pages/crm/CustomerDetail';
 import { InventoryHealth } from '@/pages/insights/InventoryHealth';
 import { PurchaseAnalytics } from '@/pages/insights/PurchaseAnalytics';
@@ -111,6 +112,7 @@ export const router = createHashRouter([
           // CRM
           { path: 'coupons', element: <Coupons /> },
           { path: 'loyalty', element: <Loyalty /> },
+          { path: 'rewards', element: <Rewards /> },
           {
             path: 'campaigns',
             element: <RequireAuth minRole="manager" />,

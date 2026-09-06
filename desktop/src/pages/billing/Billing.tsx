@@ -50,6 +50,7 @@ import {
 import { listStores } from '@/lib/stores-api';
 import { snapshotStores } from '@/lib/store-snapshot';
 import { LoyaltyChip } from '@/components/billing/LoyaltyChip';
+import { RewardBanner } from '@/components/billing/RewardBanner';
 import { resolvePrices, type ResolvedPrice } from '@/lib/price-lists-api';
 import { findUserByStaffCode, listUsers } from '@/lib/users-api';
 import { cn } from '@/lib/cn';
@@ -1698,6 +1699,16 @@ export function Billing(): JSX.Element {
                 {totals.grand.toFixed(2)}
               </span>
             </div>
+            {/* The gift ladder. Placed directly under the total, because both
+                halves are about that number: what it has already earned, and
+                what a little more would earn. Renders nothing when the shop
+                runs no schemes. */}
+            {storeId && lines.length > 0 && (
+              <div className="mt-3">
+                <RewardBanner storeId={storeId} amount={totals.grand.toFixed(2)} />
+              </div>
+            )}
+
             {/* What the customer saved against the printed MRP. Shown only
                 when at least one line has an MRP — a confident "You saved
                 Rs.0.00" on a cart with no MRP data would be misleading. */}

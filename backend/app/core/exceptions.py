@@ -22,6 +22,38 @@ from app.core.logging import get_logger
 log = get_logger(__name__)
 
 
+def _jsonable_errors(errors: list[dict]) -> list[dict]:
+    """Make Pydantic's error list safe to serialise.
+
+    A `model_validator` that raises ValueError puts the EXCEPTION OBJECT into
+    the error's `ctx`, and json.dumps cannot serialise it. The handler then
+    died mid-response, so every such rule returned 500 INSTEAD OF 422 — the
+    validation fired correctly and the caller was told the server had crashed.
+
+    This affected any custom validator anywhere in the app, and stayed hidden
+    because until now none of them raised.
+
+    `input` is dropped rather than stringified: it is the caller's own payload
+    echoed back, and for `/auth` routes that means a password in the response
+    body and in whatever logs it.
+    """
+    safe: list[dict] = []
+    for err in errors:
+        clean = {k: v for k, v in err.items() if k not in {"ctx", "input", "url"}}
+        ctx = err.get("ctx")
+        if isinstance(ctx, dict):
+            # Keep the context values that are plain data; drop the rest.
+            keep = {
+                k: v
+                for k, v in ctx.items()
+                if isinstance(v, (str, int, float, bool, type(None)))
+            }
+            if keep:
+                clean["ctx"] = keep
+        safe.append(clean)
+    return safe
+
+
 # ---------------------------------------------------------------------------
 # Domain exceptions
 # ---------------------------------------------------------------------------
@@ -112,7 +144,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             content=_envelope(
                 "VALIDATION_ERROR",
                 "Request body failed validation.",
-                {"errors": exc.errors()},
+                {"errors": _jsonable_errors(exc.errors())},
             ),
         )
 

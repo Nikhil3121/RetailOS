@@ -21,7 +21,6 @@ os.environ.setdefault("CORS_ORIGINS", "")
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy import event  # noqa: E402
 from sqlalchemy.engine import Engine  # noqa: E402
-from sqlalchemy.pool import NullPool  # noqa: E402
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # noqa: E402
 
 import app.db.session as db_session_mod  # noqa: E402
@@ -76,21 +75,7 @@ def _override_engine() -> AsyncIterator[None]:
     get_settings.cache_clear()
     settings = get_settings()
 
-    # NullPool: every connection is opened fresh and closed after use.
-    #
-    # `PRAGMA foreign_keys` is PER CONNECTION, so with a shared pool one test
-    # can hand back a connection with it unset and the next test runs
-    # unenforced. That is decided by which connection a test happens to draw,
-    # which is why it looked like a test passing alone and failing in the
-    # suite. The sync tests in test_production_guards.py made it reproducible:
-    # their async autouse fixture runs in its own event loop, so the connection
-    # it touches goes back to the pool in a state the next test inherits.
-    #
-    # A throwaway SQLite file does not need connection pooling; determinism
-    # here is worth far more than the microseconds.
-    engine = create_async_engine(
-        settings.database_url, future=True, poolclass=NullPool
-    )
+    engine = create_async_engine(settings.database_url, future=True)
 
     session_local = async_sessionmaker(
         bind=engine, expire_on_commit=False, autoflush=False,
@@ -117,15 +102,19 @@ async def _clean_db() -> AsyncIterator[None]:
     order in which a throwaway schema is torn down does not.
 
     AUTOCOMMIT is load-bearing: `PRAGMA foreign_keys` is a NO-OP inside a
-    transaction, so under `engine.begin()` the OFF would never apply and the
-    rebuild would fail on the constraints it is meant to sidestep. The engine
-    uses NullPool, so this connection is discarded rather than handed on.
+    transaction, so under `engine.begin()` neither the OFF nor the ON would
+    apply — the rebuild would fail on the very constraints it is sidestepping,
+    and the connection would go back to the pool unenforced.
     """
     async with db_session_mod.engine.connect() as conn:
         await conn.execution_options(isolation_level="AUTOCOMMIT")
         await conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+        # Switch enforcement back ON before this connection returns to the
+        # pool. `foreign_keys` is per-connection, so a connection handed back
+        # with it OFF would leave the NEXT test unenforced.
+        await conn.exec_driver_sql("PRAGMA foreign_keys=ON")
     yield
 
 

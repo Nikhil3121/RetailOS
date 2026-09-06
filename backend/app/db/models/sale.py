@@ -245,6 +245,24 @@ class Sale(UUIDPKMixin, TimestampMixin, Base):
 
     completed_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
     voided_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    # ---- gift earned on this bill ------------------------------------------
+    #
+    # The scheme it came from, plus a SNAPSHOT of what the customer was handed.
+    # The label is stored rather than joined for the same reason `mrp` is:
+    # renaming the scheme in December must not rewrite a November bill, and
+    # deleting the scheme must not erase what was actually given.
+    #
+    # Counting these is how the shop knows what a promotion cost. There is no
+    # counter on the scheme, because a counter drifts the first time a bill is
+    # voided.
+    reward_scheme_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("reward_schemes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reward_label: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
     void_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(

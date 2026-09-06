@@ -51,6 +51,7 @@ from app.services.audit import AuditService
 from app.services.day_session import DaySessionService
 from app.services.inventory import InventoryService
 from app.services.loyalty import LoyaltyService
+from app.services.reward import RewardService
 from app.services.price_list import PriceListService
 
 
@@ -576,6 +577,25 @@ class SaleService:
             occurred_at=occurred_at,
             terminal_uuid=payload.terminal_uuid,
         )
+        # ---- gift scheme --------------------------------------------------
+        #
+        # Decided by the SAME function the billing screen calls to show
+        # "₹180 more for a steel glass". If the two used different logic a
+        # customer could be promised a bottle on screen and not get one on the
+        # bill, which is the worst thing this feature could do.
+        #
+        # The label is COPIED onto the sale rather than joined, so renaming or
+        # deleting the scheme later cannot change what a printed bill says the
+        # customer was handed.
+        outcome = await RewardService(self.db).evaluate(
+            store_id=payload.store_id,
+            amount=grand_total,
+            on_day=occurred_at.date(),
+        )
+        if outcome.earned is not None:
+            sale.reward_scheme_id = outcome.earned.id
+            sale.reward_label = outcome.earned.gift_label
+
         sale.lines = lines
         sale.payments = [
             SalePayment(method=p.method, amount=p.amount, reference=p.reference)
