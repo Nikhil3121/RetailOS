@@ -6,12 +6,14 @@ from __future__ import annotations
 import re
 import uuid
 
-from sqlalchemy import func, select
+from datetime import datetime, timezone
+
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.security import hash_password
-from app.db.models.user import User
+from app.db.models.user import RefreshToken, User
 from app.schemas.user import UserCreate, UserUpdate
 
 
@@ -116,6 +118,22 @@ class UserService:
                         code="STAFF_CODE_TAKEN",
                     )
                 data["staff_code"] = code
+
+        # A new password is hashed and applied to the right column, and every
+        # OTHER session for this user is revoked. Without the revoke, someone
+        # whose access was just taken away keeps working on whatever terminal
+        # they are already signed in to.
+        new_password = data.pop("password", None)
+        if new_password:
+            user.hashed_password = hash_password(new_password)
+            await self.db.execute(
+                update(RefreshToken)
+                .where(
+                    RefreshToken.user_id == user.id,
+                    RefreshToken.revoked_at.is_(None),
+                )
+                .values(revoked_at=datetime.now(timezone.utc))
+            )
 
         for field, value in data.items():
             setattr(user, field, value)

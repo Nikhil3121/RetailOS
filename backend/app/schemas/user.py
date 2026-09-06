@@ -41,6 +41,29 @@ class UserUpdate(BaseModel):
     commission_pct: Decimal | None = Field(
         default=None, ge=0, le=100, decimal_places=2, max_digits=5
     )
+    password: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=128,
+        description=(
+            "Set a new password for this user. Omit to leave it unchanged. "
+            "An owner needs this because shop staff forget passwords weekly "
+            "and the email-based reset assumes a working mailbox they may not "
+            "have. Setting it signs the user out of every other session."
+        ),
+    )
+
+    @property
+    def audit_safe(self) -> dict:
+        """Fields for the audit log, with the password removed.
+
+        `model_dump()` would write the plaintext straight into `audit_logs`,
+        which is a table many people can read and which is never purged.
+        """
+        data = self.model_dump(exclude_unset=True, mode="json")
+        if "password" in data:
+            data["password"] = "***"
+        return data
 
 
 class UserRead(ORMModel):

@@ -100,7 +100,9 @@ async def update_user(
         entity_type="user",
         entity_id=user.id,
         actor=actor,
-        changes=payload.model_dump(exclude_unset=True, mode="json"),
+        # audit_safe, not model_dump: a plaintext password must never reach
+        # the audit log, which many people can read and nothing ever purges.
+        changes=payload.audit_safe,
     )
     return UserRead.model_validate(user)
 

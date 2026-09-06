@@ -29,6 +29,14 @@ export interface UpdateUserBody {
   phone?: string | null;
   staff_code?: string | null;
   commission_pct?: string | null;
+  /**
+   * Set a new password for this user. Omit to leave it unchanged.
+   *
+   * An owner needs this because shop staff forget passwords weekly and the
+   * email reset assumes a working mailbox they may not have. Setting it signs
+   * the user out of every other session.
+   */
+  password?: string;
 }
 
 export function listUsers(page = 1, pageSize = 50): Promise<UsersPage> {

@@ -1,18 +1,21 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import {
   BadgeCheck,
   Copy,
   IdCard,
+  Pencil,
   Plus,
   Search,
+  Trash2,
   UserPlus,
   UserX,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { ConfirmWithPassword } from '@/components/ui/ConfirmWithPassword';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Input } from '@/components/ui/Input';
@@ -23,12 +26,17 @@ import { ApiError } from '@/lib/api';
 import { listStores } from '@/lib/stores-api';
 import {
   createUser,
+  deleteUser,
   listUsers,
   updateUser,
   type CreateUserBody,
+  type UpdateUserBody,
 } from '@/lib/users-api';
 import { ROLE_LABEL, type CurrentUser, type UserRole } from '@/types/auth';
 import { cn } from '@/lib/cn';
+
+/** Deliberately permissive — the server is the authority on what it accepts. */
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const STAFF_ROLES: { value: UserRole; label: string }[] = [
   { value: 'staff', label: 'Staff' },
@@ -49,7 +57,9 @@ export function StaffDirectory(): JSX.Element {
 
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<CurrentUser | null>(null);
   const [confirmDeactivate, setConfirmDeactivate] = useState<CurrentUser | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<CurrentUser | null>(null);
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -67,6 +77,11 @@ export function StaffDirectory(): JSX.Element {
 
   const deactivate = useMutation({
     mutationFn: (u: CurrentUser) => updateUser(u.id, { is_active: !u.is_active }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+
+  const remove = useMutation({
+    mutationFn: (u: CurrentUser) => deleteUser(u.id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
   });
 
@@ -154,14 +169,36 @@ export function StaffDirectory(): JSX.Element {
         header: '',
         align: 'right',
         cell: (u) => (
-          <Button
-            size="sm"
-            variant={u.is_active ? 'ghost' : 'secondary'}
-            onClick={() => setConfirmDeactivate(u)}
-            leadingIcon={u.is_active ? <UserX className="h-3.5 w-3.5" /> : <BadgeCheck className="h-3.5 w-3.5" />}
-          >
-            {u.is_active ? 'Deactivate' : 'Activate'}
-          </Button>
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setEditing(u)}
+              leadingIcon={<Pencil className="h-3.5 w-3.5" />}
+            >
+              Edit
+            </Button>
+            <Button
+              size="sm"
+              variant={u.is_active ? 'ghost' : 'secondary'}
+              onClick={() => setConfirmDeactivate(u)}
+              leadingIcon={u.is_active ? <UserX className="h-3.5 w-3.5" /> : <BadgeCheck className="h-3.5 w-3.5" />}
+            >
+              {u.is_active ? 'Deactivate' : 'Activate'}
+            </Button>
+            {/* Delete is last and icon-only. Deactivating is almost always the
+                right action — it keeps the person's sales history intact —
+                so the destructive one is present but not inviting. */}
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={`Delete ${u.full_name}`}
+              title="Delete permanently"
+              onClick={() => setConfirmDelete(u)}
+            >
+              <Trash2 className="h-3.5 w-3.5 text-rose-400" />
+            </Button>
+          </div>
         ),
       },
     ],
@@ -211,16 +248,38 @@ export function StaffDirectory(): JSX.Element {
         empty="No staff yet. Click Add staff to onboard your first cashier — the staff code is generated automatically."
       />
 
-      <CreateStaffModal
-        open={creating}
+      <StaffModal
+        open={creating || Boolean(editing)}
+        editing={editing}
         stores={storesQuery.data?.items ?? []}
-        onClose={() => setCreating(false)}
-        onCreated={(u) => {
+        onClose={() => {
           setCreating(false);
+          setEditing(null);
+        }}
+        onSaved={(u, wasNew) => {
+          setCreating(false);
+          setEditing(null);
           qc.invalidateQueries({ queryKey: ['users'] });
-          // Nice touch: copy the freshly-issued code to the clipboard so it can
-          // be pasted onto a printed staff card immediately.
-          if (u.staff_code) copy(u.staff_code);
+          // Copy the freshly-issued code so it can go straight onto a printed
+          // staff card. Only on create — re-copying on every edit would
+          // silently overwrite whatever the user had on their clipboard.
+          if (wasNew && u.staff_code) copy(u.staff_code);
+        }}
+      />
+
+      <ConfirmWithPassword
+        open={Boolean(confirmDelete)}
+        onClose={() => setConfirmDelete(null)}
+        title={`Delete ${confirmDelete?.full_name ?? 'staff member'}`}
+        description={
+          'Their bills and the money on them are untouched — but every sale credited ' +
+          'to them loses its salesperson, and their commission rules and targets are ' +
+          'deleted with them. None of that can be recovered. ' +
+          'Deactivating instead keeps the whole history and stops them logging in.'
+        }
+        confirmLabel="Delete permanently"
+        onConfirm={async () => {
+          if (confirmDelete) await remove.mutateAsync(confirmDelete);
         }}
       />
 
@@ -288,17 +347,36 @@ interface StoreLike {
   name: string;
 }
 
-function CreateStaffModal({
+/**
+ * One form for adding and editing staff.
+ *
+ * Deliberately not two components. The fields are identical, and a duplicate
+ * form is how "we added a field to Add but forgot Edit" happens — which on
+ * this screen would mean a commission percentage that can be set once and
+ * never corrected.
+ *
+ * Three things differ in edit mode:
+ *   - The email is shown but locked. It is the login identity and the server
+ *     does not accept a change to it, so an editable box would be a lie.
+ *   - The password is optional and blank. Filling it resets the password and
+ *     signs the person out everywhere; leaving it alone changes nothing.
+ *   - The staff code is editable, because a badge gets reprinted.
+ */
+function StaffModal({
   open,
+  editing,
   stores,
   onClose,
-  onCreated,
+  onSaved,
 }: {
   open: boolean;
+  editing: CurrentUser | null;
   stores: StoreLike[];
   onClose: () => void;
-  onCreated: (u: CurrentUser) => void;
+  onSaved: (u: CurrentUser, wasNew: boolean) => void;
 }): JSX.Element {
+  const isEdit = Boolean(editing);
+
   const {
     register,
     handleSubmit,
@@ -318,9 +396,44 @@ function CreateStaffModal({
   });
 
   const [error, setError] = useState<string | null>(null);
+  const editingId = editing?.id;
+
+  // Load the row being edited when the dialog opens. Keyed on the id so
+  // switching straight from one staff member to another refills the form
+  // instead of showing the previous person's details.
+  useEffect(() => {
+    if (!open) return;
+    setError(null);
+    reset({
+      full_name: editing?.full_name ?? '',
+      email: editing?.email ?? '',
+      phone: editing?.phone ?? '',
+      role: (editing?.role as UserRole) ?? 'cashier',
+      store_id: editing?.store_id ?? '',
+      password: '',
+      staff_code: editing?.staff_code ?? '',
+      commission_pct: editing?.commission_pct ?? '',
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editingId, reset]);
 
   const save = useMutation({
     mutationFn: (v: StaffFormValues) => {
+      if (editing) {
+        const body: UpdateUserBody = {
+          full_name: v.full_name.trim(),
+          role: v.role,
+          store_id: v.store_id || null,
+          phone: v.phone.trim() || null,
+          staff_code: v.staff_code.trim().toUpperCase() || null,
+          commission_pct: v.commission_pct.trim() || null,
+        };
+        // Only send a password when one was actually typed. Sending an empty
+        // string would reset it to nothing on every ordinary edit.
+        if (v.password.trim()) body.password = v.password;
+        return updateUser(editing.id, body);
+      }
+
       const body: CreateUserBody = {
         email: v.email.trim().toLowerCase(),
         full_name: v.full_name.trim(),
@@ -336,10 +449,14 @@ function CreateStaffModal({
     },
     onSuccess: (u) => {
       reset();
-      onCreated(u);
+      onSaved(u, !isEdit);
     },
     onError: (err) => {
-      setError(err instanceof ApiError ? err.message : 'Failed to create staff.');
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : `Failed to ${isEdit ? 'save' : 'create'} staff.`,
+      );
     },
   });
 
@@ -356,8 +473,12 @@ function CreateStaffModal({
         setError(null);
         onClose();
       }}
-      title="Add staff member"
-      description="A staff code (STF-####) is generated automatically. Copy it onto a name badge — cashiers type it at the register to credit sales to this person."
+      title={isEdit ? `Edit ${editing?.full_name}` : 'Add staff member'}
+      description={
+        isEdit
+          ? 'Change their details, move them to another branch, or reset a forgotten password.'
+          : 'A staff code (STF-####) is generated automatically. Copy it onto a name badge — cashiers type it at the register to credit sales to this person.'
+      }
       size="lg"
     >
       <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
@@ -368,15 +489,15 @@ function CreateStaffModal({
             {...register('full_name', { required: 'Name is required' })}
           />
           <Input
-            label="Email (login)"
+            label={isEdit ? 'Email (login) — cannot be changed' : 'Email (login)'}
             type="email"
+            disabled={isEdit}
             error={errors.email?.message}
             {...register('email', {
-              required: 'Email is required',
-              pattern: {
-                value: /^\S+@\S+\.\S+$/,
-                message: 'Enter a valid email',
-              },
+              required: isEdit ? false : 'Email is required',
+              pattern: isEdit
+                ? undefined
+                : { value: EMAIL_PATTERN, message: 'Enter a valid email' },
             })}
           />
         </div>
@@ -384,26 +505,31 @@ function CreateStaffModal({
         <div className="grid grid-cols-2 gap-3">
           <Input label="Phone (optional)" {...register('phone')} />
           <Input
-            label="Password"
+            label={isEdit ? 'New password (leave blank to keep)' : 'Password'}
             type="password"
-            hint="At least 8 characters. Staff can change it later."
+            autoComplete="new-password"
+            hint={
+              isEdit
+                ? 'Setting one signs them out of every device.'
+                : 'At least 8 characters. Staff can change it later.'
+            }
             error={errors.password?.message}
             {...register('password', {
-              required: 'Password is required',
-              minLength: { value: 8, message: 'At least 8 characters' },
+              required: isEdit ? false : 'Password is required',
+              // In edit mode a blank box means "leave it alone", so the length
+              // rule must not fire on an empty value.
+              validate: (v) =>
+                (isEdit && !v) || v.length >= 8 || 'At least 8 characters',
             })}
           />
         </div>
 
         <div className="grid grid-cols-3 gap-3">
-          <Select
-            label="Role"
-            options={STAFF_ROLES}
-            {...register('role', { required: true })}
-          />
+          <Select label="Role" options={STAFF_ROLES} {...register('role', { required: true })} />
           <Select
             label="Assigned store (optional)"
             placeholder="— None —"
+            hint="Blank means they can work in any branch"
             options={stores.map((s) => ({ label: `${s.code} · ${s.name}`, value: s.id }))}
             {...register('store_id')}
           />
@@ -421,15 +547,22 @@ function CreateStaffModal({
 
         <div>
           <Input
-            label="Staff code (optional — auto if blank)"
+            label={isEdit ? 'Staff code' : 'Staff code (optional — auto if blank)'}
             placeholder="STF-0001"
-            hint="Leave blank to auto-issue the next STF-#### code"
+            hint={
+              isEdit
+                ? 'Changing this changes what cashiers type at the register.'
+                : 'Leave blank to auto-issue the next STF-#### code'
+            }
             {...register('staff_code')}
           />
         </div>
 
         {error && (
-          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          <div
+            role="alert"
+            className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200"
+          >
             {error}
           </div>
         )}
@@ -441,9 +574,9 @@ function CreateStaffModal({
           <Button
             type="submit"
             loading={save.isPending}
-            leadingIcon={<Plus className="h-4 w-4" />}
+            leadingIcon={isEdit ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
           >
-            Create staff
+            {isEdit ? 'Save changes' : 'Create staff'}
           </Button>
         </div>
       </form>
