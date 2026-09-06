@@ -33,6 +33,7 @@ from decimal import Decimal
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.business_day import business_date
 from app.core.exceptions import NotFoundError
 from app.db.models.reward import RewardScheme
 
@@ -103,7 +104,14 @@ class RewardService:
         because that is the number printed at the bottom of the bill and the
         only one a customer can check against "spend ₹1,000".
         """
-        day = on_day or date.today()
+        # The SHOP's calendar date, not the server's and not UTC's.
+        #
+        # A scheme's valid_from/valid_to are typed by a manager thinking in
+        # their own calendar. Comparing them against a UTC date means a
+        # scheme dated "15 November" does not fire until 05:30 that morning in
+        # India — several hours into the busiest day of a festival, and
+        # precisely when it was meant to be running.
+        day = on_day or business_date()
 
         live = [
             s

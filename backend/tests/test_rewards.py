@@ -14,7 +14,13 @@ bill is the worst thing this feature could do.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import timedelta
+
+# The SHOP's calendar date, not the server's. A scheme's dates are typed by a
+# person, and "today" has to mean the same thing on both sides of the
+# assertion — otherwise this test passes or fails depending on what time of
+# day it is run, which is exactly the bug it exists to catch.
+from app.core.business_day import business_date
 from decimal import Decimal
 
 from httpx import AsyncClient
@@ -202,7 +208,7 @@ async def test_the_threshold_is_the_final_amount_after_discount(
 
 async def test_a_scheme_outside_its_dates_does_not_fire(client: AsyncClient) -> None:
     shop = await _shop(client)
-    past = date.today() - timedelta(days=30)
+    past = business_date() - timedelta(days=30)
     await _scheme(client, shop, valid_from=str(past - timedelta(days=10)),
                   valid_to=str(past))
 
@@ -213,7 +219,7 @@ async def test_a_scheme_outside_its_dates_does_not_fire(client: AsyncClient) -> 
 async def test_a_scheme_runs_on_its_last_day(client: AsyncClient) -> None:
     """"Valid to 15 Nov" must include the 15th — the busiest day of a festival."""
     shop = await _shop(client)
-    await _scheme(client, shop, valid_from=str(date.today()), valid_to=str(date.today()))
+    await _scheme(client, shop, valid_from=str(business_date()), valid_to=str(business_date()))
 
     sale = await _sell(client, shop, "1.000", "1000.00")
     assert sale["reward_label"] == "Water bottle"

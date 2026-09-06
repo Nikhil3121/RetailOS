@@ -42,6 +42,27 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     project_name: str = "RetailOS"
 
+    # ---- what "today" means -------------------------------------------------
+    #
+    # Every timestamp in this database is stored in UTC, and that is correct.
+    # But a shop's DAY is not a UTC day, and several decisions turn on the
+    # calendar date a person would name:
+    #
+    #   · a gift scheme "valid to 15 November" must run on the 15th as the
+    #     shopkeeper counts it, not from 05:30 that morning because that is
+    #     when 15 November begins in UTC;
+    #   · a day book asked for "today" means today in the shop.
+    #
+    # Left as UTC by DEFAULT, deliberately: changing what "today" means is a
+    # change to reported figures, and it must be an explicit decision by
+    # whoever runs the deployment rather than something that happens because a
+    # server moved. For M.S. Mall this is set to Asia/Kolkata in the
+    # environment; see DEPLOYMENT.md.
+    #
+    # An unknown zone name falls back to UTC rather than refusing to boot — a
+    # typo here must not take a shop's till offline.
+    business_timezone: str = "UTC"
+
     # -- Server --------------------------------------------------------------
     host: str = "127.0.0.1"
     port: int = 8000

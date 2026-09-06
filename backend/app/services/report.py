@@ -464,6 +464,19 @@ class ReportService:
         Money in is positive, money out negative. A day book that printed both
         as positive would need a legend to be read at all — and the one thing
         this report cannot afford is to be misread at the end of a long day.
+
+        A KNOWN SEAM: TWO KINDS OF DATE
+        Sales carry UTC timestamps and are matched with `date(created_at)`.
+        Expenses carry `expense_date`, a plain calendar date a PERSON typed.
+        Those are different clocks, and for the five and a half hours after
+        midnight IST they disagree: a sale rung at 00:30 local is stored on
+        the previous UTC date, while an expense entered in the same minute and
+        dated "today" is not.
+
+        Not papered over, because the fix is a shop timezone this system does
+        not yet have, and inventing one here would push the same ambiguity
+        into every other report while looking solved. In practice a day book
+        is read at closing time, when both clocks agree.
         """
         entries: list[DayBookEntry] = []
         sales_total = _ZERO

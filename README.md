@@ -122,7 +122,7 @@ Run these from `desktop/`:
 | Command | What it does |
 |---|---|
 | `npm run dev` | Vite + Electron, hot reload |
-| `npm test` | **Full** suite (466 tests). Rebuilds the native module first — use this, not bare `vitest` |
+| `npm test` | **Full** suite (475 tests). Rebuilds the native module first — use this, not bare `vitest` |
 | `npm run typecheck` | Type-checks renderer *and* main process |
 | `npm run build` | Production renderer + main bundles |
 | `npm run dist:win` | Windows installer → `release/` |
@@ -131,7 +131,7 @@ From `backend/`:
 
 | Command | What it does |
 |---|---|
-| `pytest` | Backend suite (308 tests). Run it ALONE — two concurrent runs share one SQLite file and fail in ways that look like real defects |
+| `pytest` | Backend suite (327 tests). Run it ALONE — two concurrent runs share one SQLite file and fail in ways that look like real defects |
 | `alembic upgrade head` | Apply migrations |
 | `alembic revision --autogenerate -m "..."` | New migration |
 

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, Cpu, Database, HardDrive, ShieldCheck, WifiOff } from 'lucide-react';
 
+import { BackupPanel } from '@/components/system/BackupPanel';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { getHealth, API_V1 } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -27,6 +28,10 @@ export function SystemStatus(): JSX.Element {
           Live introspection of the desktop client, the API, and the runtime it's talking to.
         </p>
       </header>
+
+      {/* Renders nothing outside the desktop app — backups are a property of
+          the local database, and in a browser there is no such database. */}
+      <BackupPanel />
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <GlassCard>

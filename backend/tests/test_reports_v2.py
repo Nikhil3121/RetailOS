@@ -312,11 +312,15 @@ async def test_an_expense_leaves_the_drawer_too(client: AsyncClient) -> None:
     r = await client.post("/api/v1/expenses/categories", headers=s["h"],
                           json={"code": "TEA", "name": "Tea"})
     category_id = r.json()["id"]
-    from datetime import date as _date
+    # Dated on the SAME clock the report runs on. `expense_date` is a plain
+    # calendar date a person types, while sales are UTC timestamps, and for
+    # five and a half hours after midnight IST those disagree — see the seam
+    # noted on ReportService.day_book.
+    from datetime import datetime as _dt, timezone as _tz
 
     r = await client.post("/api/v1/expenses", headers=s["h"], json={
         "category_id": category_id, "store_id": s["store_id"],
-        "expense_date": _date.today().isoformat(),
+        "expense_date": _dt.now(_tz.utc).date().isoformat(),
         "amount": "150.00", "payment_method": "cash",
         "description": "Chai for the counter"})
     assert r.status_code == 201, r.text

@@ -36,6 +36,29 @@ not optional.
 | `DATABASE_URL` | `postgresql+asyncpg://user:pass@host:5432/retailos` |
 | `CORS_ORIGINS` | Explicit list. Never `*` in production |
 | `ALLOWED_HOSTS` | Your API hostname(s) |
+| `BUSINESS_TIMEZONE` | **Set this.** `Asia/Kolkata` for M.S. Mall. See below |
+
+#### `BUSINESS_TIMEZONE` — what "today" means
+
+Every timestamp is stored in UTC, and that is right. But a shop's **day** is
+not a UTC day, and a few decisions turn on the calendar date a person would
+name:
+
+- a gift scheme "valid to 15 November" must run on the 15th **as the
+  shopkeeper counts it** — not from 05:30 that morning, which is when
+  15 November begins in UTC and is several hours into the busiest day of a
+  festival;
+- the day book asked for "today" means today in the shop.
+
+It defaults to **UTC**, deliberately. Changing what "today" means changes
+reported figures, so it has to be an explicit decision by whoever runs the
+deployment rather than something that happens because a server moved region.
+An unrecognised zone name falls back to UTC rather than refusing to boot — a
+typo here must not be able to take a till offline.
+
+```
+BUSINESS_TIMEZONE=Asia/Kolkata
+```
 
 Generate the signing key:
 

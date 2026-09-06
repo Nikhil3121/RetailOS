@@ -79,6 +79,19 @@ const backup = {
   verify: (file: string) => ipcRenderer.invoke('backup:verify', file),
   integrity: () => ipcRenderer.invoke('backup:integrity'),
   create: () => ipcRenderer.invoke('backup:create'),
+  /**
+   * Replace the live database with a backup.
+   *
+   * `confirmation` must be the backup's own file name, typed by the operator.
+   * The main process checks it and refuses otherwise — a dialog with a Yes
+   * button is dismissed by reflex, a filename is not typed by accident.
+   *
+   * On success the app MUST be restarted: every repository and sync worker in
+   * the main process is still holding state from the database that was just
+   * replaced underneath them.
+   */
+  restore: (file: string, confirmation: string) =>
+    ipcRenderer.invoke('backup:restore', file, confirmation),
 };
 
 const sync = {

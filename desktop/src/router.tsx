@@ -54,6 +54,7 @@ import { LabelPrint } from '@/pages/catalog/LabelPrint';
 import { StockCount } from '@/pages/inventory/StockCount';
 import { DayBook } from '@/pages/reports/DayBook';
 import { Profitability } from '@/pages/reports/Profitability';
+import { Gstr1 } from '@/pages/reports/Gstr1';
 import { CustomerDetail } from '@/pages/crm/CustomerDetail';
 import { InventoryHealth } from '@/pages/insights/InventoryHealth';
 import { PurchaseAnalytics } from '@/pages/insights/PurchaseAnalytics';
@@ -121,6 +122,7 @@ export const router = createHashRouter([
           { path: 'stock-count', element: <StockCount /> },
           { path: 'day-book', element: <DayBook /> },
           { path: 'profitability', element: <Profitability /> },
+          { path: 'gstr1', element: <Gstr1 /> },
           {
             path: 'campaigns',
             element: <RequireAuth minRole="manager" />,

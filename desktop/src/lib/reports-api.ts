@@ -175,3 +175,106 @@ export function dayBook(params: {
 } = {}): Promise<DayBook> {
   return apiRequest({ path: `/reports/day-book?${buildQS(params)}`, method: 'GET' });
 }
+
+/* ---------------------------------------------------------------------------
+ * GSTR-1
+ * ------------------------------------------------------------------------ */
+
+export interface Gstr1RateLine {
+  rate: string;
+  taxable_value: string;
+  cgst: string;
+  sgst: string;
+  igst: string;
+}
+
+export interface Gstr1B2bInvoice {
+  invoice_number: string;
+  invoice_date: string;
+  customer_gstin: string;
+  customer_name: string;
+  invoice_value: string;
+  /** Two-digit state code, read from the customer's GSTIN. */
+  place_of_supply: string;
+  reverse_charge: boolean;
+  lines: Gstr1RateLine[];
+}
+
+export interface Gstr1B2csRow {
+  place_of_supply: string;
+  rate: string;
+  taxable_value: string;
+  cgst: string;
+  sgst: string;
+  igst: string;
+  invoice_count: number;
+}
+
+export interface Gstr1CreditNote {
+  note_number: string;
+  note_date: string;
+  original_invoice_number: string | null;
+  customer_gstin: string | null;
+  customer_name: string | null;
+  place_of_supply: string;
+  /** POSITIVE, as the return expects — storage keeps returns negative. */
+  note_value: string;
+  lines: Gstr1RateLine[];
+}
+
+export interface Gstr1HsnRow {
+  hsn_code: string;
+  description: string;
+  uqc: string;
+  quantity: string;
+  taxable_value: string;
+  cgst: string;
+  sgst: string;
+  igst: string;
+}
+
+export interface Gstr1DocumentRange {
+  document_type: string;
+  from_number: string;
+  to_number: string;
+  total_count: number;
+  cancelled_count: number;
+}
+
+export interface Gstr1Return {
+  gstin: string;
+  store_name: string;
+  from_date: string;
+  to_date: string;
+  b2b: Gstr1B2bInvoice[];
+  b2cs: Gstr1B2csRow[];
+  credit_notes: Gstr1CreditNote[];
+  hsn: Gstr1HsnRow[];
+  documents: Gstr1DocumentRange[];
+  total_taxable_value: string;
+  total_tax: string;
+  total_invoice_value: string;
+  /**
+   * Bills the return could not fully classify, and why.
+   *
+   * MUST be shown. A missing HSN code or a malformed GSTIN means a line is
+   * absent from a section of the return, and whoever files it will file short
+   * without ever knowing.
+   */
+  warnings: string[];
+}
+
+/**
+ * The GSTR-1 working paper for one branch and one period.
+ *
+ * Not a portal upload — see the endpoint's own note. It is the arithmetic,
+ * laid out the way the return is laid out, so the figures can be tied to the
+ * books without re-adding a month of bills by hand.
+ */
+export function gstr1(params: {
+  store_id: string;
+  from_date?: string;
+  to_date?: string;
+}): Promise<Gstr1Return> {
+  return apiRequest({ path: `/reports/gstr1?${buildQS(params)}`, method: 'GET' });
+}

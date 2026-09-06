@@ -23,6 +23,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.business_day import business_date
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.db.models.bundle import ProductBundleItem
 from app.db.models.customer import Customer
@@ -718,7 +719,11 @@ class SaleService:
         outcome = await RewardService(self.db).evaluate(
             store_id=payload.store_id,
             amount=grand_total,
-            on_day=occurred_at.date(),
+            # Converted to the SHOP's calendar date. `occurred_at` is UTC, and
+            # a scheme's dates were typed by a person — comparing the two
+            # directly is what stops a festival scheme firing on its own
+            # morning.
+            on_day=business_date(occurred_at),
         )
         if outcome.earned is not None:
             sale.reward_scheme_id = outcome.earned.id

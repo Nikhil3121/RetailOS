@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import DbSession, require_min_role
+from app.core.business_day import business_date
 from app.db.models.user import UserRole
 from app.schemas.report import (
     DailySalesRow,
@@ -17,6 +18,8 @@ from app.schemas.report import (
     SalesSummary,
     TopProductRow,
 )
+from app.schemas.gstr1 import Gstr1Return
+from app.services.gstr1 import Gstr1Service
 from app.services.report import ReportService
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -163,7 +166,13 @@ async def item_profit(
 )
 async def day_book(
     db: DbSession,
-    day: date | None = Query(None, description="Defaults to today."),
+    day: date | None = Query(
+        None,
+        description=(
+            "Defaults to today in UTC, which is the clock every timestamp in "
+            "the database is on. See the note below."
+        ),
+    ),
     store_id: uuid.UUID | None = Query(
         None,
         description=(
@@ -172,4 +181,59 @@ async def day_book(
         ),
     ),
 ) -> DayBook:
-    return await ReportService(db).day_book(day=day or date.today(), store_id=store_id)
+    """
+    THE DEFAULT IS THE SHOP'S TODAY.
+
+    Which is UTC unless `BUSINESS_TIMEZONE` says otherwise — never the
+    server's own local clock, because that would make the figures depend on
+    where the process happens to be running.
+
+    It matters at exactly the hour this report is used. A shop closing at 1am
+    IST: the server's local date has rolled over, the UTC date has not, and
+    picking the wrong one hands the operator a day book for a day that has
+    not started — empty drawer, no session, no bills.
+    """
+    return await ReportService(db).day_book(
+        day=day or business_date(), store_id=store_id
+    )
+
+
+@router.get(
+    "/gstr1",
+    response_model=Gstr1Return,
+    summary="GSTR-1 working paper for one branch and one period.",
+    dependencies=[Depends(require_min_role(UserRole.OWNER))],
+)
+async def gstr1(
+    db: DbSession,
+    store_id: uuid.UUID = Query(
+        ...,
+        description=(
+            "Required. A return is filed against ONE GSTIN, and the two malls "
+            "file separately — a combined figure is not a return anybody can "
+            "submit."
+        ),
+    ),
+    from_date: date | None = Query(None),
+    to_date: date | None = Query(None),
+) -> Gstr1Return:
+    """The arithmetic of GSTR-1, laid out the way the return is laid out.
+
+    NOT A PORTAL UPLOAD. The GSTN JSON schema is versioned and rejects on
+    details that only surface on submission; this system has never touched the
+    portal, and emitting "portal-ready" JSON it has never had validated is how
+    a wrong return gets filed with confidence.
+
+    What it does do is remove the month of hand-adding: B2B invoice-wise, B2C
+    summarised by place of supply and rate, credit notes reported POSITIVE as
+    the return expects, the HSN summary, and the document ranges.
+
+    Read `warnings` before filing. Lines with no HSN code and customers with a
+    malformed GSTIN are named there rather than quietly reducing a total.
+    """
+    default = _default_range()
+    return await Gstr1Service(db).build(
+        store_id=store_id,
+        from_date=from_date or default[0],
+        to_date=to_date or default[1],
+    )

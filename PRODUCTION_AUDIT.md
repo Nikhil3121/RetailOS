@@ -395,8 +395,8 @@ Two were pre-existing and are worth naming, because both were silent:
 
 | Suite | Count |
 |---|---|
-| Backend (pytest) | **308 passing** |
-| Desktop (vitest) | **466 passing** |
+| Backend (pytest) | **327 passing** |
+| Desktop (vitest) | **475 passing** |
 
 Backend and desktop suites must be run **separately**; two concurrent pytest
 runs share one SQLite file and produce failures that are artefacts of the

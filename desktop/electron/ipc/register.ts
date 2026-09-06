@@ -19,11 +19,21 @@
 import { ipcMain } from 'electron';
 
 import { catalogSyncService } from '../catalog/catalog-sync-service';
-import { backupScheduler, checkIntegrity, createBackup, listBackups, verifyBackup } from '../database/backup-service';
+import {
+  backupScheduler,
+  checkIntegrity,
+  createBackup,
+  listBackups,
+  restoreBackup,
+  restoreConfirmationMatches,
+  verifyBackup,
+} from '../database/backup-service';
 import { describeMissingDriver, printerService } from '../printing/printer-service';
 import type { ShopDetails } from '../printing/receipt-formatter';
 import { saleSyncService } from '../sync/sale-sync-service';
-import { requireDatabase } from '../database/connection';
+import path from 'node:path';
+
+import { databasePath, requireDatabase } from '../database/connection';
 import { databaseService } from '../database/database-service';
 import { describeError, log } from '../database/logger';
 import { getPosConfig } from '../pos-config';
@@ -461,11 +471,25 @@ export function registerDatabaseIpc(): void {
 
   // ---- backup ----
   //
-  // NOTE: restore is deliberately NOT exposed over IPC. It replaces the live
-  // database, which is the single most destructive thing this app can do, and
-  // it requires the connection to be closed first. A one-click renderer button
-  // would make it far too easy to do by accident. It is implemented and tested
-  // in backup-service.ts for a supervised recovery.
+  // Restore IS exposed, but never as a one-click button.
+  //
+  // It replaces the live database, which is the most destructive thing this
+  // application can do. The previous position was to leave it off the IPC
+  // surface entirely — which was right about the danger and wrong about the
+  // consequence: a shopkeeper whose database will not open then has no path
+  // at all, at the exact moment they most need one.
+  //
+  // So it is exposed with the guards that make it a supervised action rather
+  // than a misclick:
+  //
+  //   · the operator must TYPE the backup's filename, proving they chose that
+  //     file deliberately and did not stab at a row;
+  //   · the backup is verified before anything is touched (backup-service);
+  //   · the current database is moved aside, never deleted, so a restore from
+  //     the wrong file is recoverable;
+  //   · the connection is closed first, because restoring underneath a live
+  //     handle is how half-written state happens;
+  //   · the app must be restarted afterwards, and says so.
 
   ipcMain.handle(
     'backup:list',
@@ -499,6 +523,67 @@ export function registerDatabaseIpc(): void {
     } catch (err) {
       log.error('ipc.handler_failed', { channel: 'backup:create', ...describeError(err) });
       return { ok: false, error: 'Backup failed.', code: 'INTERNAL' };
+    }
+  });
+
+  // Async only because it must close the database and re-open it afterwards.
+  ipcMain.handle('backup:restore', async (_event, rawFile, rawConfirm) => {
+    try {
+      const file = requireString(rawFile, 'file', 4096);
+      const confirmation = requireString(rawConfirm, 'confirmation', 4096);
+
+      // THE GATE. The rule itself lives in backup-service so it can be tested
+      // on its own — a guard that exists only inside an IPC handler is a guard
+      // nobody can prove still works.
+      const expected = path.basename(file);
+      if (!restoreConfirmationMatches(file, confirmation)) {
+        return {
+          ok: false,
+          code: 'CONFIRMATION_MISMATCH',
+          error: `Type the backup's file name exactly to confirm: ${expected}`,
+        };
+      }
+
+      const target = databasePath();
+
+      // Closed BEFORE the file is touched. backup-service refuses to do this
+      // itself — a service that closes the live connection underneath its
+      // caller is how you get half-written state — so it happens here, where
+      // the lifecycle is owned.
+      databaseService.shutdown();
+
+      const result = restoreBackup(file, target);
+      if (!result.ok) {
+        // The original was left in place (or put back) by restoreBackup, so
+        // re-opening returns the till to exactly where it was.
+        databaseService.initialize();
+        return {
+          ok: false,
+          code: 'RESTORE_FAILED',
+          error: result.error ?? 'Restore failed.',
+        };
+      }
+
+      log.warn('backup.restored_from_ui', {
+        from: path.basename(file),
+        previous_kept_at: result.replacedTo ? path.basename(result.replacedTo) : null,
+      });
+
+      // Deliberately NOT re-initialised here. Every repository, cached
+      // statement and in-flight sync worker in this process is holding state
+      // from the database that has just been replaced underneath them. A
+      // restart is the only honest way to get a consistent process, and the
+      // renderer is told to say so.
+      return {
+        ok: true,
+        data: {
+          previousKeptAt: result.replacedTo ?? null,
+          restartRequired: true,
+        },
+      };
+    } catch (err) {
+      log.error('ipc.handler_failed', { channel: 'backup:restore', ...describeError(err) });
+      return { ok: false, code: 'INTERNAL', error: 'Restore failed.' };
     }
   });
 

@@ -28,6 +28,7 @@ A guide for shop owners and counter staff. **No technical knowledge needed.**
 20. [Holding a bill for later](#20-holding-a-bill-for-later)
 21. [Reprinting a bill](#21-reprinting-a-bill)
 22. [Closing the drawer accurately](#22-closing-the-drawer-accurately)
+23. [Preparing your GSTR-1](#23-preparing-your-gstr-1)
 
 ---
 
@@ -557,3 +558,39 @@ exactly which note is missing rather than just that the number is wrong.
 The **Day book** (Sidebar → Day book) shows every movement of money for the
 day and what the drawer should hold. Card and UPI sales are kept separate from
 cash there, because they do not change what is in the drawer.
+
+---
+
+## 23. Preparing your GSTR-1
+
+**Sidebar → GSTR-1** (owner only)
+
+Choose a branch and the month. You get every section of the return with the
+figures already added up:
+
+- **B2B** — sales to customers who gave you a GST number, listed one by one
+- **B2C** — counter sales, summarised
+- **Credit notes** — shown as positive amounts, which is how the return wants
+  them
+- **HSN summary** — required, and the section people most often leave blank
+- **Documents issued** — your first and last bill number for the month
+
+Each section has a **CSV** button so your accountant can open it in Excel.
+
+### Read the orange box first
+
+If anything is missing — a product with no HSN code, a customer whose GST
+number is typed wrong — it is listed in an orange box at the top. Those items
+are **not** included properly in the return. Fix them and reload before you
+send anything to your accountant.
+
+### This is not the filing
+
+The return is still filed on the GST portal. This screen does the adding up so
+the numbers can be checked against your books first — it does not submit
+anything, and it does not replace your accountant.
+
+### The two malls file separately
+
+They have different GST numbers, so you prepare one return per branch. There is
+no combined figure, because a combined figure is not something anyone can file.

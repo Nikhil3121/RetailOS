@@ -15,6 +15,7 @@ import {
   ClipboardList,
   Coins,
   DoorOpen,
+  FileSpreadsheet,
   FolderTree,
   History,
   IndianRupee,
@@ -183,6 +184,7 @@ const NAV_GROUPS: NavGroup[] = [
       // "Day book" is what a shop calls the closing-time reconciliation.
       { label: 'Day book', to: '/day-book', icon: BookOpen, minRole: 'manager' },
       { label: 'Profitability', to: '/profitability', icon: TrendingUp, minRole: 'owner' },
+      { label: 'GSTR-1', to: '/gstr1', icon: FileSpreadsheet, minRole: 'owner' },
       { label: 'Inventory health', to: '/inventory-health', icon: PackageSearch, minRole: 'manager' },
       { label: 'Purchase analytics', to: '/purchase-analytics', icon: Activity, minRole: 'manager' },
     ],
