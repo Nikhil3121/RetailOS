@@ -15,7 +15,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Minus, Plus, RotateCcw, ScanBarcode, TriangleAlert } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowLeftRight,
+  Minus,
+  Plus,
+  RotateCcw,
+  ScanBarcode,
+  Trash2,
+  TriangleAlert,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -31,6 +40,8 @@ import {
   type PaymentMethod,
   type ReturnableLine,
 } from '@/lib/sales-api';
+import { createExchange } from '@/lib/sales-api';
+import { stockLevels, type StockLevelRow } from '@/lib/inventory-api';
 import { cn } from '@/lib/cn';
 
 const REFUND_METHODS: { label: string; value: PaymentMethod }[] = [
@@ -60,6 +71,22 @@ export function SaleReturn(): JSX.Element {
   const [reason, setReason] = useState('');
   const [refundMethod, setRefundMethod] = useState<PaymentMethod>('cash');
   const [refundAmount, setRefundAmount] = useState('');
+
+  /**
+   * Refund the money, or swap for other goods.
+   *
+   * Wrong size is the commonest reason a customer comes back to a garment
+   * shop, and the answer is almost never "here is your money". Refund stays
+   * the default because it is the simpler, safer action; exchange is one
+   * click away because it is the frequent one.
+   */
+  const [mode, setMode] = useState<'refund' | 'exchange'>('refund');
+  /** What the customer is taking instead. Keyed by variant. */
+  const [swapFor, setSwapFor] = useState<
+    { variant_id: string; label: string; sku: string; price: string; qty: number }[]
+  >([]);
+  const [swapScan, setSwapScan] = useState('');
+  const [swapMiss, setSwapMiss] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -191,6 +218,94 @@ export function SaleReturn(): JSX.Element {
   }, [lastHit]);
   const nothingLeft = rows.length > 0 && rows.every((r) => Number(r.returnable_quantity) <= 0);
 
+  /**
+   * The branch's catalogue, for turning a scanned barcode into a replacement.
+   *
+   * Loaded only in exchange mode and only once the bill is known — a return
+   * that is just a refund should not pay for a catalogue fetch it never uses.
+   */
+  const swapCatalogQuery = useQuery({
+    queryKey: ['exchange-catalog', saleQuery.data?.store_id],
+    queryFn: () =>
+      stockLevels({ store_id: saleQuery.data!.store_id, page_size: 1000 }),
+    enabled: mode === 'exchange' && Boolean(saleQuery.data?.store_id),
+    staleTime: 5 * 60_000,
+  });
+
+  /** What the replacement goods come to. Display only — the server prices it. */
+  const swapTotal = swapFor.reduce((sum, r) => sum + r.qty * Number(r.price), 0);
+  /** Positive: customer pays. Negative: shop owes. */
+  const difference = swapTotal - estimate;
+
+  function addSwap(raw: string): void {
+    const query = raw.trim().toLowerCase();
+    if (!query) return;
+    const rows = swapCatalogQuery.data?.items ?? [];
+    // Barcode first and separately from SKU — a scanner emits a barcode, and
+    // when one string is one variant's barcode and another's SKU the
+    // scanner's reading has to win. Same precedence as the billing screen.
+    const hit: StockLevelRow | undefined =
+      rows.find((r) => r.barcode && r.barcode.toLowerCase() === query) ??
+      rows.find((r) => r.sku.toLowerCase() === query);
+    if (!hit) {
+      setSwapMiss(raw.trim());
+      return;
+    }
+    setSwapMiss(null);
+    setSwapScan('');
+    setSwapFor((prev) => {
+      const existing = prev.find((p) => p.variant_id === hit.variant_id);
+      if (existing) {
+        return prev.map((p) =>
+          p.variant_id === hit.variant_id ? { ...p, qty: p.qty + 1 } : p,
+        );
+      }
+      return [
+        ...prev,
+        {
+          variant_id: hit.variant_id,
+          label: `${hit.product_name} · ${hit.variant_name}`,
+          sku: hit.sku,
+          // The catalogue's current selling price, for the on-screen estimate
+          // only. The server prices the replacement itself, exactly as it
+          // would on the billing screen.
+          price: hit.selling_price,
+          qty: 1,
+        },
+      ];
+    });
+  }
+
+  const exchange = useMutation({
+    mutationFn: () =>
+      createExchange(id!, {
+        lines: chosen.map((r) => ({
+          sale_line_id: r.sale_line_id,
+          quantity: Number(qty[r.sale_line_id]).toFixed(3),
+        })),
+        new_lines: swapFor.map((r) => ({
+          variant_id: r.variant_id,
+          quantity: String(r.qty),
+        })),
+        // Only what the customer actually hands over on top. An even swap
+        // sends nothing.
+        payments:
+          difference > 0
+            ? [{ method: refundMethod, amount: difference.toFixed(2) }]
+            : [],
+        // When the shop owes money, hand it back by the chosen method. Left
+        // unset the credit stays on the note for the customer to spend later.
+        refund_excess_method: difference < 0 ? refundMethod : null,
+        reason: reason.trim(),
+        notes: notes.trim() || null,
+      }),
+    // The INVOICE, not the credit note. What the customer walks out with is
+    // the bill for the goods they are taking.
+    onSuccess: (res) => navigate(`/sales/${res.sale.id}/invoice`),
+    onError: (e) =>
+      setError(e instanceof ApiError ? e.message : 'Could not record the exchange.'),
+  });
+
   const save = useMutation({
     mutationFn: () =>
       createSaleReturn(id!, {
@@ -216,6 +331,10 @@ export function SaleReturn(): JSX.Element {
       setError('Enter how many units are coming back.');
       return;
     }
+    if (mode === 'exchange' && swapFor.length === 0) {
+      setError('Scan what the customer is taking instead, or switch to a refund.');
+      return;
+    }
     if (!reason.trim()) {
       setError('A reason is required — it appears on the credit note and the audit log.');
       return;
@@ -231,10 +350,15 @@ export function SaleReturn(): JSX.Element {
       );
       return;
     }
+    if (mode === 'exchange') {
+      exchange.mutate();
+      return;
+    }
     save.mutate();
   }
 
   const sale = saleQuery.data;
+  const busy = save.isPending || exchange.isPending;
 
   return (
     <div className="space-y-4">
@@ -367,6 +491,117 @@ export function SaleReturn(): JSX.Element {
         </GlassCard>
       )}
 
+      {/* Refund or swap.
+          Placed ABOVE the reason and settlement controls because it changes
+          what those controls mean — a cashier should never fill a form in and
+          then discover it was the wrong one. */}
+      <div className="glass inline-flex w-fit gap-1 p-1">
+        {(
+          [
+            ['refund', 'Refund', RotateCcw],
+            ['exchange', 'Exchange', ArrowLeftRight],
+          ] as const
+        ).map(([value, label, Icon]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => {
+              setMode(value);
+              setError(null);
+            }}
+            className={cn(
+              'flex items-center gap-2 rounded-lg px-4 py-2 text-sm transition-colors',
+              mode === value
+                ? 'bg-brand-600 text-white'
+                : 'text-slate-400 hover:bg-surface-muted hover:text-slate-200',
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* The replacement goods. Only in exchange mode — an empty picker on
+          every refund would be permanent clutter on a busy screen. */}
+      {mode === 'exchange' && (
+        <GlassCard className="space-y-3 p-4">
+          <div className="flex items-center gap-2 text-sm font-medium text-white">
+            <ArrowLeftRight className="h-4 w-4" />
+            Taking instead
+          </div>
+
+          <Input
+            label="Scan the replacement"
+            value={swapScan}
+            onChange={(e) => setSwapScan(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addSwap(swapScan);
+              }
+            }}
+            placeholder="Barcode or SKU"
+            leadingIcon={<ScanBarcode className="h-4 w-4" />}
+          />
+
+          {swapMiss && (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              Nothing in this branch&apos;s catalogue matches &quot;{swapMiss}&quot;.
+            </div>
+          )}
+
+          {swapFor.length === 0 ? (
+            <p className="text-xs text-slate-500">
+              Scan each item the customer is taking. Prices are set by the
+              server when the exchange is saved.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border/50">
+              {swapFor.map((row) => (
+                <li key={row.variant_id} className="flex items-center gap-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm text-white">{row.label}</div>
+                    <div className="font-mono text-xs text-slate-500">{row.sku}</div>
+                  </div>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={row.qty}
+                    onChange={(e) =>
+                      setSwapFor((prev) =>
+                        prev.map((p) =>
+                          p.variant_id === row.variant_id
+                            ? { ...p, qty: Math.max(1, Number(e.target.value) || 1) }
+                            : p,
+                        ),
+                      )
+                    }
+                    className="money w-16 rounded-md border border-border-strong bg-surface-muted px-2 py-1 text-center text-sm text-slate-100"
+                  />
+                  <span className="money w-24 text-right text-sm text-slate-300">
+                    ₹{(row.qty * Number(row.price)).toFixed(2)}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Remove"
+                    onClick={() =>
+                      setSwapFor((prev) =>
+                        prev.filter((p) => p.variant_id !== row.variant_id),
+                      )
+                    }
+                    className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-rose-500/10 hover:text-rose-300"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </GlassCard>
+      )}
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <GlassCard className="min-w-0 space-y-3 p-4">
           <Input
@@ -393,21 +628,68 @@ export function SaleReturn(): JSX.Element {
             </span>
           </div>
 
-          <Select
-            label="Refund by"
-            options={REFUND_METHODS}
-            value={refundMethod}
-            onChange={(e) => setRefundMethod(e.target.value as PaymentMethod)}
-          />
-          <Input
-            label="Refund now"
-            type="number"
-            step="0.01"
-            min="0"
-            value={refundAmount}
-            onChange={(e) => setRefundAmount(e.target.value)}
-            hint="Leave at 0 to hold the credit on the customer's account instead."
-          />
+          {mode === 'exchange' ? (
+            <>
+              <div className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="text-slate-400">Taking instead</span>
+                <span className="money text-slate-200">₹{swapTotal.toFixed(2)}</span>
+              </div>
+
+              {/* The one figure the counter says out loud. Everything above it
+                  is working; this is the sentence spoken to the customer. */}
+              <div
+                className={cn(
+                  'rounded-lg border px-3 py-2 text-sm',
+                  difference > 0
+                    ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                    : difference < 0
+                      ? 'border-cobalt-500/40 bg-cobalt-500/10 text-cobalt-200'
+                      : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200',
+                )}
+              >
+                {difference > 0
+                  ? `Customer pays ₹${difference.toFixed(2)}`
+                  : difference < 0
+                    ? `Shop owes ₹${Math.abs(difference).toFixed(2)}`
+                    : 'Even swap — no money changes hands.'}
+              </div>
+
+              {difference !== 0 && (
+                <Select
+                  label={difference > 0 ? 'Paying by' : 'Refund the difference by'}
+                  options={REFUND_METHODS}
+                  value={refundMethod}
+                  onChange={(e) => setRefundMethod(e.target.value as PaymentMethod)}
+                />
+              )}
+
+              {/* Says what actually happens, because "exchange" hides two
+                  documents and a cashier asked for the bill later needs to
+                  know there are two. */}
+              <p className="text-xs text-slate-500">
+                Issues a credit note for what came back and a separate invoice
+                for what is going out. The credit pays for the new bill.
+              </p>
+            </>
+          ) : (
+            <>
+              <Select
+                label="Refund by"
+                options={REFUND_METHODS}
+                value={refundMethod}
+                onChange={(e) => setRefundMethod(e.target.value as PaymentMethod)}
+              />
+              <Input
+                label="Refund now"
+                type="number"
+                step="0.01"
+                min="0"
+                value={refundAmount}
+                onChange={(e) => setRefundAmount(e.target.value)}
+                hint="Leave at 0 to hold the credit on the customer's account instead."
+              />
+            </>
+          )}
 
           {error && (
             <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
@@ -418,18 +700,25 @@ export function SaleReturn(): JSX.Element {
           <Button
             size="lg"
             className="w-full"
-            loading={save.isPending}
+            loading={busy}
             disabled={
-              save.isPending ||
+              busy ||
               chosen.length === 0 ||
+              (mode === 'exchange' && swapFor.length === 0) ||
               nothingLeft ||
               linesQuery.isError ||
               linesQuery.isLoading
             }
-            leadingIcon={<RotateCcw className="h-4 w-4" />}
+            leadingIcon={
+              mode === 'exchange' ? (
+                <ArrowLeftRight className="h-4 w-4" />
+              ) : (
+                <RotateCcw className="h-4 w-4" />
+              )
+            }
             onClick={submit}
           >
-            Record return
+            {mode === 'exchange' ? 'Record exchange' : 'Record return'}
           </Button>
           {/* Say WHY the button is unavailable. A disabled control with no
               explanation is indistinguishable from a broken one. */}
@@ -438,7 +727,15 @@ export function SaleReturn(): JSX.Element {
               ? 'Unavailable until the bill loads.'
               : chosen.length === 0
                 ? 'Enter a quantity against at least one line above.'
-                : `Puts ${chosen.length} ${chosen.length === 1 ? 'line' : 'lines'} back into stock and issues a credit note.`}
+                : mode === 'exchange' && swapFor.length === 0
+                  ? 'Scan what the customer is taking instead.'
+                  : mode === 'exchange'
+                    ? `Puts ${chosen.length} ${
+                        chosen.length === 1 ? 'line' : 'lines'
+                      } back and bills ${swapFor.length} in their place.`
+                    : `Puts ${chosen.length} ${
+                        chosen.length === 1 ? 'line' : 'lines'
+                      } back into stock and issues a credit note.`}
           </p>
         </GlassCard>
       </div>

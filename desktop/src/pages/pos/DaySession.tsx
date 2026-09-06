@@ -283,6 +283,16 @@ function OpenSessionCard({
   );
 }
 
+/**
+ * Indian notes, largest first — the order a drawer is emptied in.
+ *
+ * The ₹2000 is included even though it was withdrawn in 2023: they still turn
+ * up, and a note the software cannot record is a note that quietly breaks the
+ * count. Coins are deliberately absent; a till reconciles on notes, and a row
+ * per coin would triple the form for a few rupees.
+ */
+const DENOMINATIONS = [2000, 500, 200, 100, 50, 20, 10] as const;
+
 interface CloseCardProps {
   sessionId: string;
   openedAt: string;
@@ -307,6 +317,30 @@ function CloseSessionCard({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  /**
+   * The drawer counted note by note.
+   *
+   * Optional — a till that closes with a typed total keeps working exactly as
+   * before. But counting by denomination is what a person does anyway when
+   * emptying a till, and recording it makes the total DERIVED rather than
+   * asserted: the arithmetic cannot be wrong, and a discrepancy becomes
+   * investigable ("exactly one 500 short") instead of merely noticed.
+   */
+  const [notes_, setNotes_] = useState<Record<string, string>>({});
+  const [counting, setCounting] = useState(false);
+
+  const notesTotal = DENOMINATIONS.reduce(
+    (sum, note) => sum + note * (Number(notes_[String(note)]) || 0),
+    0,
+  );
+
+  // While the breakdown is open it OWNS the total. Two editable figures for
+  // one number is how they end up disagreeing, and the server refuses that
+  // anyway — better to make it impossible here than to explain it later.
+  useEffect(() => {
+    if (counting) reset((prev) => ({ ...prev, counted_cash: notesTotal.toFixed(2) }));
+  }, [counting, notesTotal, reset]);
+
   const counted = Number(watch('counted_cash') || '0') || 0;
   const expected = Number(summary?.expected_cash ?? openingCash) || 0;
   const diff = counted - expected;
@@ -317,6 +351,15 @@ function CloseSessionCard({
     try {
       await closeSession(sessionId, {
         counted_cash: values.counted_cash,
+        // Sent only when the breakdown was actually used. An empty map would
+        // record "we counted no notes", which is a different claim from "we
+        // did not count by note".
+        denominations: counting
+          ? Object.fromEntries(
+              DENOMINATIONS.map((note) => [String(note), Number(notes_[String(note)]) || 0])
+                .filter(([, count]) => Number(count) > 0),
+            )
+          : null,
         notes: values.notes.trim() || null,
       });
       onClosed();
@@ -370,8 +413,49 @@ function CloseSessionCard({
               min="0"
               leadingIcon={<Wallet className="h-4 w-4" />}
               error={errors.counted_cash?.message}
+              readOnly={counting}
               {...register('counted_cash', { required: 'Enter counted cash' })}
             />
+
+            <button
+              type="button"
+              onClick={() => setCounting((v) => !v)}
+              className="text-xs text-cobalt-300 underline-offset-2 hover:underline"
+            >
+              {counting ? 'Enter a total instead' : 'Count by note'}
+            </button>
+
+            {counting && (
+              <div className="rounded-xl border border-border bg-white/[0.02] p-3">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {DENOMINATIONS.map((note) => (
+                    <label key={note} className="flex items-center gap-2 text-sm">
+                      <span className="w-12 shrink-0 text-right font-mono text-slate-400">
+                        ₹{note}
+                      </span>
+                      <span className="text-slate-600">×</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={notes_[String(note)] ?? ''}
+                        onChange={(e) =>
+                          setNotes_((p) => ({ ...p, [String(note)]: e.target.value }))
+                        }
+                        placeholder="0"
+                        className="w-full min-w-0 rounded-md border border-border-strong bg-surface-muted px-2 py-1 text-center font-mono text-sm text-slate-100 focus:border-brand-600 focus:outline-none"
+                      />
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-3 flex items-baseline justify-between border-t border-border/70 pt-3 text-sm">
+                  <span className="text-slate-400">Notes add up to</span>
+                  <span className="font-mono text-lg font-semibold text-white">
+                    ₹{notesTotal.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            )}
             <Textarea label="Notes (optional)" rows={3} {...register('notes')} />
             {error && (
               <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">

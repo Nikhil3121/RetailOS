@@ -32,6 +32,10 @@ export interface StockLevelRow {
   store_id: string;
   store_code: string;
   quantity: string;
+  /** What it sells for. Display only — every write path prices the item
+   *  itself; this is here so a picker can show a figure without a request
+   *  per row. */
+  selling_price: string;
   unit_symbol: string;
   unit_is_fractional: boolean;
   reorder_point: string;

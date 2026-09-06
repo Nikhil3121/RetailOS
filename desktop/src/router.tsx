@@ -52,6 +52,8 @@ import { Loyalty } from '@/pages/crm/Loyalty';
 import { Rewards } from '@/pages/crm/Rewards';
 import { LabelPrint } from '@/pages/catalog/LabelPrint';
 import { StockCount } from '@/pages/inventory/StockCount';
+import { DayBook } from '@/pages/reports/DayBook';
+import { Profitability } from '@/pages/reports/Profitability';
 import { CustomerDetail } from '@/pages/crm/CustomerDetail';
 import { InventoryHealth } from '@/pages/insights/InventoryHealth';
 import { PurchaseAnalytics } from '@/pages/insights/PurchaseAnalytics';
@@ -117,6 +119,8 @@ export const router = createHashRouter([
           { path: 'rewards', element: <Rewards /> },
           { path: 'labels', element: <LabelPrint /> },
           { path: 'stock-count', element: <StockCount /> },
+          { path: 'day-book', element: <DayBook /> },
+          { path: 'profitability', element: <Profitability /> },
           {
             path: 'campaigns',
             element: <RequireAuth minRole="manager" />,

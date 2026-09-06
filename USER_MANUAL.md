@@ -22,6 +22,12 @@ A guide for shop owners and counter staff. **No technical knowledge needed.**
 14. [Deleting things safely](#14-deleting-things-safely)
 15. [Settings you should set once](#15-settings-you-should-set-once)
 16. [Common problems](#16-common-problems)
+17. [Counting your stock](#17-counting-your-stock)
+18. [Exchanging an item](#18-exchanging-an-item)
+19. [Finding a bill the customer has lost](#19-finding-a-bill-the-customer-has-lost)
+20. [Holding a bill for later](#20-holding-a-bill-for-later)
+21. [Reprinting a bill](#21-reprinting-a-bill)
+22. [Closing the drawer accurately](#22-closing-the-drawer-accurately)
 
 ---
 
@@ -140,6 +146,11 @@ Press **Shift + F5**, or open the bill and choose **Return**.
 3. **Give the reason** — required, and it appears on the credit note
 4. **Refund the money**, or leave it on the customer's account
 5. **Save**
+
+> **Are they swapping it for something else?** Use **Exchange** instead — see
+> [section 18](#18-exchanging-an-item). Do not refund the money and then ring
+> up a new bill: that puts cash out of the drawer and straight back in, and
+> your day's cash will not match.
 
 What happens automatically:
 
@@ -416,3 +427,133 @@ balance it produced, so you can see exactly where a figure came from.
 ---
 
 *Version 0.1.0 · For support, contact your RetailOS supplier.*
+
+---
+
+## 17. Counting your stock
+
+**This is the first thing to do before you start using the system properly.**
+
+Your stock figures all start at **zero**. The old system's quantities were not
+brought across, because they could not be trusted. Until you count, nothing the
+software says about stock means anything.
+
+### Doing a count
+
+**Sidebar → Stock count → New count**
+
+1. **Name the sheet** — the date is filled in for you
+2. **Say what you are counting** — "Sarees, ground floor". You can count one
+   section at a time; **nothing you do not count is touched**
+3. **Leave "Blind count" ticked** (see below)
+4. **Start counting** — scan an item, type how many are on the shelf, press
+   **Enter**. The cursor comes back for the next one
+5. When the section is done, press **Post**
+
+### Why the expected number is hidden
+
+A blind count does not show you what the computer thinks is there. This is
+deliberate. If you can see the number you are "supposed" to find, it is very
+easy — especially at the end of a long day — to write it down instead of
+counting. A sheet like that tells you nothing.
+
+After you post, every figure is shown: what you counted, what the books said,
+and the difference.
+
+### Counting while the shop is open
+
+You can. If you count a rack at 6pm and post the sheet at 9pm, the system
+applies **the difference you found**, not the total you wrote. Anything sold in
+between stays sold. If something moved between counting and posting, it says so
+on the summary.
+
+### Negative stock
+
+**Sidebar → Inventory → filter "Negative"**
+
+A negative figure means the books are wrong somewhere — something was sold that
+the system did not know you had, or a delivery was never entered. It cannot be
+true of a real shelf, so every item on that list needs looking at. The worst
+ones are at the top.
+
+---
+
+## 18. Exchanging an item
+
+Wrong size is the commonest reason a customer comes back. Do not refund and
+re-bill — use **Exchange**.
+
+**Open the bill → Return → switch to Exchange**
+
+1. **Choose what is coming back** — same as a return
+2. **Scan what they are taking instead**
+3. The panel tells you one of three things:
+   - **Even swap** — nothing changes hands
+   - **Customer pays ₹___** — take the difference
+   - **Shop owes ₹___** — choose how to give it back, or leave it as credit
+     for them to use later
+4. **Record exchange**
+
+### What the customer gets
+
+**Two documents**, and this is correct:
+
+- a **credit note** for what they brought back
+- an **invoice** for what they are taking
+
+This is what GST requires. The credit pays for the new bill automatically, so
+no cash moves unless there is a genuine difference.
+
+---
+
+## 19. Finding a bill the customer has lost
+
+**Sidebar → Sales → the "Find a bill" box**
+
+Type any of:
+
+- their **phone number** — spaces and dashes do not matter
+- the **bill number**
+- their **name**
+
+While you are searching, the date filter is switched off — you are looking for
+a bill and you do not know when it was.
+
+---
+
+## 20. Holding a bill for later
+
+A customer steps away mid-bill. Press **F3** to park the cart, and serve the
+next person. **Shift + F3** shows everything parked.
+
+**Any till in your branch can pick it up.** A bill parked at counter 1 can be
+finished at counter 2.
+
+> **If the internet is down** when you park a bill, it is saved on **that
+> computer only** and the row says "this till only". The other counter cannot
+> see it. Finish it at the same machine.
+
+---
+
+## 21. Reprinting a bill
+
+Every copy after the first is stamped **DUPLICATE COPY**.
+
+This is not the software being awkward. Two identical bills can each be
+presented as the original — for a return, for a warranty claim, to your
+accountant — and nothing tells them apart. The stamp is what makes the first
+one the original.
+
+---
+
+## 22. Closing the drawer accurately
+
+At **Close and reconcile**, press **Count by note** instead of typing a total.
+
+Enter how many ₹500s, how many ₹100s, and so on. The total is worked out for
+you, so it cannot be mistyped — and if the drawer is short, you will know
+exactly which note is missing rather than just that the number is wrong.
+
+The **Day book** (Sidebar → Day book) shows every movement of money for the
+day and what the drawer should hold. Card and UPI sales are kept separate from
+cash there, because they do not change what is in the drawer.

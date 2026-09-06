@@ -16,12 +16,19 @@ RECEIPT  ==  SQLITE  ==  POSTGRESQL
 
 ## What it does
 
-**Billing** — barcode scanning, held bills, split payments, credit sales,
-returns and credit notes, advances, per-customer price lists, product bundles.
+**Billing** — barcode scanning, split payments, credit sales, returns and
+credit notes, one-action exchanges, advances, per-customer price lists, product
+bundles, bill-level discounts and coupons, loyalty points spendable at the
+till, gift schemes on bill value. Held bills are shared across the counters of
+a branch, so a customer who steps away at one till can be finished at the
+other. Every invoice copy after the first is marked DUPLICATE.
 
 **Inventory** — variants (size × colour), stock movements with a full audit
-trail, purchase orders with goods receipt, unit conversion (buy in cartons,
-stock in pieces), reorder points.
+trail, purchase orders with goods receipt and last-purchase-rate lookup, unit
+conversion (buy in cartons, stock in pieces), reorder points, transfers between
+branches, and physical stock audit: blind count sheets that post the variance
+found rather than the total counted, so a count taken during trading hours does
+not undo the evening's sales.
 
 **Money and compliance** — GST-compliant invoices with separate serial series
 per document type (`INV-` / `CRN-` / `ADV-`), CGST/SGST split, HSN codes,
@@ -30,8 +37,15 @@ per-branch GSTIN, day sessions with cash reconciliation.
 **People** — customers with credit limits and outstanding balances, reward
 points with membership tiers, suppliers, staff with roles, commissions.
 
-**Operations** — dashboards, reports, expense tracking, notifications,
-automatic local backups, an audit log of every consequential action.
+**Operations** — dashboards, expense tracking, notifications, automatic local
+backups, an audit log of every consequential action.
+
+**Reports** — a day book that answers "what should be in the drawer" rather
+than "what did we sell", with cash tracked separately from card and UPI
+throughout; sales sliced by brand, category, size or salesperson; item-wise
+margin computed from the cost recorded at the time of sale, which reports how
+much of a period it could not cost rather than quietly leaving it out. Bills
+can be found by phone number when the customer has lost their copy.
 
 ---
 
@@ -108,7 +122,7 @@ Run these from `desktop/`:
 | Command | What it does |
 |---|---|
 | `npm run dev` | Vite + Electron, hot reload |
-| `npm test` | **Full** suite (446 tests). Rebuilds the native module first — use this, not bare `vitest` |
+| `npm test` | **Full** suite (466 tests). Rebuilds the native module first — use this, not bare `vitest` |
 | `npm run typecheck` | Type-checks renderer *and* main process |
 | `npm run build` | Production renderer + main bundles |
 | `npm run dist:win` | Windows installer → `release/` |
@@ -117,7 +131,7 @@ From `backend/`:
 
 | Command | What it does |
 |---|---|
-| `pytest` | Backend suite (132 tests) |
+| `pytest` | Backend suite (308 tests). Run it ALONE — two concurrent runs share one SQLite file and fail in ways that look like real defects |
 | `alembic upgrade head` | Apply migrations |
 | `alembic revision --autogenerate -m "..."` | New migration |
 

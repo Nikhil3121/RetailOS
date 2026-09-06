@@ -2,13 +2,19 @@ import { apiRequest } from '@/lib/api';
 import type { Paginated } from '@/lib/suppliers-api';
 
 export type SaleStatus = 'completed' | 'voided';
-export type PaymentMethod = 'cash' | 'card' | 'upi' | 'other';
+/**
+ * `credit_note` is the value of returned goods spent on the bill replacing
+ * them. A tender, not a discount — and deliberately not cash, because nothing
+ * moved through the drawer.
+ */
+export type PaymentMethod = 'cash' | 'card' | 'upi' | 'other' | 'credit_note';
 
 export const PAYMENT_LABEL: Record<PaymentMethod, string> = {
   cash: 'Cash',
   card: 'Card',
   upi: 'UPI',
   other: 'Other',
+  credit_note: 'Credit note',
 };
 
 export interface SaleLine {
@@ -284,4 +290,60 @@ export async function createSaleReturn(
  */
 export function displayAmount(value: string | number): number {
   return Math.abs(Number(value) || 0);
+}
+
+/* ---------------------------------------------------------------------------
+ * Exchange
+ * ------------------------------------------------------------------------ */
+
+export interface SaleExchangeBody {
+  /** What is coming back, by ORIGINAL sale line. Prices are never sent —
+   *  they are copied from the invoice being reversed. */
+  lines: { sale_line_id: string; quantity: string }[];
+  /** What the customer is taking instead. Priced as any other sale. */
+  new_lines: SaleLineInput[];
+  /** Anything paid ON TOP of the credit. */
+  payments?: SalePaymentInput[];
+  /**
+   * How to hand back the difference when the returned goods are worth MORE.
+   *
+   * Omit to leave it as a balance on the credit note, which the customer can
+   * spend later — the safer default, because money never leaves the drawer
+   * unless somebody asked for it.
+   */
+  refund_excess_method?: PaymentMethod | null;
+  reason: string;
+  store_id?: string | null;
+  customer_id?: string | null;
+  salesperson_user_id?: string | null;
+  notes?: string | null;
+  round_off_enabled?: boolean;
+}
+
+export interface SaleExchangeResult {
+  /** What came back. A document in its own right, at its true value. */
+  credit_note: Sale;
+  /** What went out. Also at its true value — the credit is a tender on it,
+   *  not a discount off it. */
+  sale: Sale;
+  credit_applied: string;
+  /** Still owed BY the customer. */
+  balance_due: string;
+  /** Owed TO the customer — either refunded, or left on the credit note. */
+  credit_remaining: string;
+}
+
+/**
+ * Swap goods for other goods in one action.
+ *
+ * Two documents come back, not one: under GST the return needs its own credit
+ * note and the replacement is a sale at its own price with its own tax.
+ * Netting them into a single discounted bill would understate the invoice and
+ * leave the return unrecorded.
+ */
+export function createExchange(
+  saleId: string,
+  body: SaleExchangeBody,
+): Promise<SaleExchangeResult> {
+  return apiRequest({ path: `/sales/${saleId}/exchange`, method: 'POST', body });
 }

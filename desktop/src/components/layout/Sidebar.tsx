@@ -10,6 +10,7 @@ import {
   Boxes,
   ChevronDown,
   ChevronsLeft,
+  BookOpen,
   ChevronsRight,
   ClipboardList,
   Coins,
@@ -32,6 +33,7 @@ import {
   Tag,
   Target,
   TicketPercent,
+  TrendingUp,
   Truck,
   Users,
   Wallet2,
@@ -177,6 +179,10 @@ const NAV_GROUPS: NavGroup[] = [
     minRole: 'manager',
     items: [
       { label: 'Reports', to: '/reports', icon: BarChart3, minRole: 'manager' },
+      // Named for the question each answers, not for the table behind it.
+      // "Day book" is what a shop calls the closing-time reconciliation.
+      { label: 'Day book', to: '/day-book', icon: BookOpen, minRole: 'manager' },
+      { label: 'Profitability', to: '/profitability', icon: TrendingUp, minRole: 'owner' },
       { label: 'Inventory health', to: '/inventory-health', icon: PackageSearch, minRole: 'manager' },
       { label: 'Purchase analytics', to: '/purchase-analytics', icon: Activity, minRole: 'manager' },
     ],

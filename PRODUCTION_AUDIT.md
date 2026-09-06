@@ -345,3 +345,73 @@ scratch, while `DEPLOYMENT.md` is the operational reference.
   were reviewed and left alone because they are correct.
 - **No dependency upgrades.** `npm audit` is clean; upgrading Electron or
   FastAPI mid-audit would invalidate every test result above.
+
+---
+
+## Addendum — 6 September 2026
+
+**This section records what changed AFTER the audit above.** The audit's
+findings are left exactly as written: an audit is a record of what was true on
+the day it was performed, and editing its conclusions later would destroy the
+only thing that makes it worth having.
+
+### Findings above that are now closed
+
+| Finding | Status |
+|---|---|
+| §6.3 Redemption does not reduce a bill | **Closed.** Bill-level discount exists (migration 0025), and `redeem_points` on `SaleCreate` folds the points' value into it inside the same transaction that writes the sale. |
+
+### Go-live blocker closed
+
+**Opening stock could not be established.** The legacy import deliberately
+brought over products and variants but not stock, because the old system's
+quantities could not be trusted — so every variant read zero with no supported
+way to correct it in bulk. Physical stock audit (migration 0027) is now
+implemented: blind count sheets, per-line variance, and posting to the stock
+ledger. 19 tests.
+
+The design decision worth recording: a sheet posts the **variance measured when
+each line was entered**, not the counted total. A sheet filled in at 6pm and
+posted at 9pm contains an evening of sales; setting the balance to the counted
+figure would put every one of those units back on the shelf, overstating stock
+by exactly the evening's takings with nothing in the ledger to show for it.
+
+### Defects found and fixed while adding features
+
+Two were pre-existing and are worth naming, because both were silent:
+
+- **"Total payable" showed the gross.** The billing screen sent the bill
+  discount and round-off to the server but never subtracted them from the
+  figure on screen, and prefilled that same wrong figure into amount-paid. The
+  counter was asking for money the bill did not owe.
+- **An offline bill committed to SQLite at its gross.** The discount travelled
+  in the queued payload but not into the local row, so the receipt handed over
+  at the counter disagreed with what later reached PostgreSQL. This breached
+  `RECEIPT = SQLITE = POSTGRESQL`, the invariant the whole offline design rests
+  on. Local migration 009 gives the sale its own bill-discount, coupon, points
+  and round-off columns.
+
+### Test counts at this addendum
+
+| Suite | Count |
+|---|---|
+| Backend (pytest) | **308 passing** |
+| Desktop (vitest) | **466 passing** |
+
+Backend and desktop suites must be run **separately**; two concurrent pytest
+runs share one SQLite file and produce failures that are artefacts of the
+collision rather than real defects. The desktop suite must be run with
+`npm test`, not `npx vitest` — the former rebuilds `better-sqlite3` against
+Node's ABI and back against Electron's afterwards.
+
+### Limitations that remain unchanged
+
+Everything in §7 still stands. In particular:
+
+- **No physical thermal printer has ever been exercised.** The receipt
+  formatter now prints bill discounts, points redeemed and round-off, and that
+  is verified only through the formatter's own tests. `physicalHardwareVerified`
+  remains `false`.
+- **The Windows installer still cannot be built** in this environment — a
+  symlink privilege, not a code defect.
+- **MS1's legacy dump was never obtained.** Both dump files supplied are MS2.

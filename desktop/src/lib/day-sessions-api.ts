@@ -12,6 +12,8 @@ export interface DaySession {
   closed_by_user_id: string | null;
   closed_at: string | null;
   counted_cash: string | null;
+  /** The breakdown behind `counted_cash`, when one was entered. */
+  cash_denominations?: Record<string, number> | null;
   expected_cash: string | null;
   cash_diff: string | null;
   /** Set when a late-arriving offline sale restated this shift after close.
@@ -61,7 +63,18 @@ export function openSession(body: {
 
 export function closeSession(
   id: string,
-  body: { counted_cash: string; notes?: string | null },
+  body: {
+    counted_cash: string;
+    /**
+     * The drawer as notes counted, e.g. `{ "500": 6, "100": 11 }`.
+     *
+     * Optional. When given, the server DERIVES the total from it and refuses
+     * a `counted_cash` that disagrees — a slipped digit in a typed total is
+     * otherwise indistinguishable from a genuinely short drawer.
+     */
+    denominations?: Record<string, number> | null;
+    notes?: string | null;
+  },
 ): Promise<DaySession> {
   return apiRequest({ path: `/day-sessions/${id}/close`, method: 'POST', body });
 }

@@ -38,6 +38,11 @@ class StockLevelRow(BaseModel):
     store_id: uuid.UUID
     store_code: str
     quantity: Decimal
+    # What it sells for. Carried on the row so a screen that lets someone pick
+    # an item from this grid — the exchange counter, a stock count — can price
+    # it without a second request per item. Display only: every write path
+    # prices the item itself.
+    selling_price: Decimal
     # Unit + reorder metadata so the UI can render "12 kg", "Low stock" chips,
     # etc. without a second round-trip per row.
     unit_symbol: str

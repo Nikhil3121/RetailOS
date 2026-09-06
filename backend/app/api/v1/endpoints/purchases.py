@@ -11,6 +11,7 @@ from app.db.models.purchase import PurchaseOrderStatus
 from app.db.models.user import UserRole
 from app.schemas.common import Page
 from app.schemas.purchase import (
+    LastPurchaseRate,
     PurchaseOrderCreate,
     PurchaseOrderRead,
     PurchaseOrderSummary,
@@ -57,6 +58,47 @@ async def create_purchase_order(
 ) -> PurchaseOrderRead:
     po = await PurchaseService(db).create(payload, user_id=user.id)
     return PurchaseOrderRead.model_validate(po)
+
+
+# Declared BEFORE /{po_id}. FastAPI matches in declaration order, and
+# `po_id` is a UUID path parameter — so with the routes the other way
+# round "last-rates" is read as a malformed id and answered 422, which
+# looks exactly like a bug in the caller.
+@router.get(
+    "/last-rates",
+    response_model=list[LastPurchaseRate],
+    summary="What these items cost the last time they were actually received.",
+    dependencies=[Depends(require_min_role(UserRole.MANAGER))],
+)
+async def last_purchase_rates(
+    db: DbSession,
+    variant_ids: list[uuid.UUID] = Query(
+        ...,
+        description="Repeat the parameter per variant. Order is not significant.",
+    ),
+    supplier_id: uuid.UUID | None = Query(
+        None,
+        description=(
+            "The supplier being ordered from now. Only used to flag rates that "
+            "came from somebody else — a cheaper rate elsewhere is worth "
+            "knowing; a cheaper rate from the same supplier is a negotiating "
+            "position."
+        ),
+    ),
+) -> list[LastPurchaseRate]:
+    """A buyer raising an order is deciding whether the quoted rate is fair.
+
+    Without the last one they are guessing, or accepting whatever the supplier
+    said. A rate that crept up 8% between orders is invisible until the two
+    numbers sit next to each other.
+
+    Only RECEIVED orders count. A draft or cancelled one records a rate that
+    was proposed, not paid, and quoting it back would let a price the shop
+    never agreed to become the baseline it negotiates from.
+    """
+    return await PurchaseService(db).last_purchase_rates(
+        variant_ids=variant_ids, supplier_id=supplier_id
+    )
 
 
 @router.get(

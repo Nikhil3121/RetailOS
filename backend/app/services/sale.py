@@ -44,6 +44,7 @@ from app.schemas.sale import (
     CustomerBalance,
     SaleCreate,
     SaleLineReturnable,
+    SaleExchangeCreate,
     SaleReturnCreate,
     SaleSummary,
 )
@@ -917,6 +918,191 @@ class SaleService:
             for s in rows
         ]
         return summaries, int(total)
+
+    # ------------------------------------------------------------------
+    # Exchange
+    # ------------------------------------------------------------------
+    async def create_exchange(
+        self,
+        original_sale_id: uuid.UUID,
+        payload: SaleExchangeCreate,
+        *,
+        user_id: uuid.UUID | None,
+    ) -> tuple[Sale, Sale, Decimal, Decimal, Decimal]:
+        """Swap goods for other goods in ONE action.
+
+        Returns (credit_note, new_sale, credit_applied, still_to_settle,
+        credit_left_over).
+
+        WHY THIS EXISTS AS ITS OWN OPERATION
+        Wrong size is the single most common reason a customer comes back to a
+        garment shop, and the counter's answer is never "here is your money" —
+        it is "take the large instead". Done as two separate screens the
+        cashier has to refund cash out of the drawer and then take most of it
+        straight back in, which is slower, wrong in the day book, and leaves
+        the two documents unlinked if they are interrupted between them.
+
+        TWO DOCUMENTS, NOT ONE
+        A credit note for what came back, a full-value invoice for what went
+        out. This is not a stylistic choice: under GST the returned goods need
+        their own credit note, and the replacement is a sale at its own price
+        with its own tax. Netting them into a single discounted bill would
+        understate the invoice, misstate its GST, and leave the return with no
+        document at all.
+
+        The credit is spent on the new bill as a TENDER — payment method
+        `credit_note`. That keeps both documents at their true value while
+        recording, on the bill itself, how it was actually settled. And because
+        it is not cash, the day book does not pretend money moved through the
+        drawer when none did.
+
+        ONE TRANSACTION
+        Both documents are written inside the caller's transaction. A credit
+        note without its replacement invoice is a refund nobody authorised;
+        an invoice without its credit note is a customer charged twice.
+        """
+        # ---- the goods coming back ---------------------------------------
+        #
+        # Refunds are deliberately EMPTY here. The value is not going back to
+        # the customer as money — it is about to be spent on the replacement,
+        # and any excess is settled explicitly at the end.
+        credit_note = await self.create_return(
+            original_sale_id,
+            SaleReturnCreate(
+                lines=payload.lines,
+                refunds=[],
+                reason=payload.reason,
+                notes=payload.notes,
+                occurred_at=payload.occurred_at,
+                terminal_uuid=payload.terminal_uuid,
+                day_session_id=payload.day_session_id,
+            ),
+            user_id=user_id,
+        )
+        # Stored negative; a person deals in positive money.
+        credit_value = abs(_round(credit_note.grand_total))
+
+        # ---- what the customer is taking instead --------------------------
+        #
+        # Priced and taxed exactly as any other sale. It is a sale.
+        replacement = SaleCreate(
+            store_id=payload.store_id or credit_note.store_id,
+            customer_id=payload.customer_id,
+            salesperson_user_id=payload.salesperson_user_id,
+            lines=payload.new_lines,
+            # Payments are attached below, once the credit has been applied and
+            # the true shortfall is known.
+            payments=[],
+            notes=payload.notes,
+            bill_discount=payload.bill_discount,
+            bill_discount_reason=payload.bill_discount_reason,
+            round_off_enabled=payload.round_off_enabled,
+            occurred_at=payload.occurred_at,
+            terminal_uuid=payload.terminal_uuid,
+            day_session_id=payload.day_session_id,
+        )
+        new_sale = await self.create(replacement, user_id=user_id)
+
+        # ---- settle -------------------------------------------------------
+        due = _round(new_sale.grand_total)
+        applied = min(credit_value, due)
+        excess = _round(credit_value - applied)
+
+        if applied > _ZERO:
+            self.db.add(
+                SalePayment(
+                    sale_id=new_sale.id,
+                    method=PaymentMethod.CREDIT_NOTE,
+                    amount=applied,
+                    # The credit note's own number, on the invoice that spent
+                    # it. Without this the two documents are only linked
+                    # through the customer's memory.
+                    reference=credit_note.number,
+                )
+            )
+
+        for p in payload.payments:
+            self.db.add(
+                SalePayment(
+                    sale_id=new_sale.id,
+                    method=p.method,
+                    amount=p.amount,
+                    reference=p.reference,
+                )
+            )
+
+        paid = _round(
+            applied + sum((p.amount for p in payload.payments), start=_ZERO)
+        )
+        if paid > due:
+            raise ValidationError(
+                "More was tendered than the replacement bill is worth.",
+                code="EXCHANGE_OVERPAID",
+                details={"due": str(due), "tendered": str(paid)},
+            )
+
+        new_sale.paid_total = paid
+        new_sale.balance_due = _round(due - paid)
+        new_sale.change_due = _ZERO
+
+        # ---- the customer is owed money -----------------------------------
+        #
+        # They brought back more than they took. The excess is refunded on the
+        # CREDIT NOTE, where it belongs — a refund recorded against the new
+        # invoice would make that invoice look partly reversed when it is not.
+        #
+        # Left unrefunded when no method is given: the credit note simply
+        # carries a balance the customer can spend later, which is a real and
+        # common way for a shop to settle this.
+        credit_left_over = excess
+        if excess > _ZERO and payload.refund_excess_method is not None:
+            self.db.add(
+                SalePayment(
+                    sale_id=credit_note.id,
+                    method=payload.refund_excess_method,
+                    # Credit notes store money negative. A refund is money
+                    # leaving, so the sign follows the document.
+                    amount=-excess,
+                    reference=new_sale.number,
+                )
+            )
+            credit_note.paid_total = _round(credit_note.paid_total - excess)
+            credit_note.balance_due = _round(credit_note.balance_due + excess)
+            # Handed over, so nothing is left on the note.
+            credit_left_over = _ZERO
+
+        await self.db.flush()
+        # Re-read with populate_existing.
+        #
+        # NOT `refresh()`: a bare refresh reloads the column attributes and
+        # EXPIRES the relationships, so `lines` and `payments` would lazy-load
+        # during serialisation, outside the async context, and take the whole
+        # response down.
+        #
+        # And not a plain `get()` either: both rows are already in the identity
+        # map with their collections loaded, and a second selectinload does not
+        # overwrite an already-loaded collection — the payments just written
+        # would be missing from the response while sitting safely in the
+        # database, which is the most confusing possible failure.
+        return (
+            await self._reload(credit_note.id),
+            await self._reload(new_sale.id),
+            applied,
+            _round(due - paid),
+            credit_left_over,
+        )
+
+    async def _reload(self, sale_id: uuid.UUID) -> Sale:
+        """Fetch a sale, overwriting whatever the identity map already holds."""
+        sale = await self.db.scalar(
+            select(Sale)
+            .where(Sale.id == sale_id)
+            .options(selectinload(Sale.lines), selectinload(Sale.payments))
+            .execution_options(populate_existing=True)
+        )
+        if sale is None:  # pragma: no cover - it was just written
+            raise NotFoundError("Sale not found.", code="SALE_NOT_FOUND")
+        return sale
 
     async def add_payment(
         self,

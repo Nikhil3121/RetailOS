@@ -194,6 +194,83 @@ class SaleReturnCreate(BaseModel):
     day_session_id: uuid.UUID | None = None
 
 
+class SaleExchangeCreate(BaseModel):
+    """Body for `POST /sales/{sale_id}/exchange`.
+
+    Wrong size is the commonest reason a customer walks back into a garment
+    shop, and the answer is never "here is your money" — it is "take the large
+    instead". Done as two separate operations the cashier refunds cash out of
+    the drawer and takes most of it straight back in, which is slower, wrong in
+    the day book, and leaves the two documents unlinked if anything interrupts
+    the pair.
+
+    TWO DOCUMENTS COME OUT OF THIS, NOT ONE. A credit note for the goods
+    returned and a full-value invoice for the goods taken. Under GST the return
+    needs its own document and the replacement is a sale at its own price with
+    its own tax; netting them into one discounted bill would understate the
+    invoice and leave the return unrecorded.
+    """
+
+    #: What is coming back, by ORIGINAL sale line. Prices are never accepted —
+    #: they are copied from the invoice being reversed, so a credit note cannot
+    #: disagree with the bill it credits.
+    lines: list[SaleReturnLineInput] = Field(min_length=1)
+
+    #: What the customer is taking instead. Priced and taxed as any other sale,
+    #: because it is one.
+    new_lines: list[SaleLineInput] = Field(min_length=1)
+
+    #: Anything paid ON TOP of the credit. Empty when the swap is even or the
+    #: customer is owed money.
+    payments: list[SalePaymentInput] = Field(default_factory=list)
+
+    #: How to hand back the difference when the returned goods are worth MORE
+    #: than the replacement.
+    #:
+    #: None leaves it as a balance on the credit note, which the customer can
+    #: spend later — a real and common way for a shop to settle this, and the
+    #: safer default: money is never pushed out of the drawer unless somebody
+    #: asked for it.
+    refund_excess_method: PaymentMethod | None = None
+
+    reason: str = Field(min_length=1, max_length=255)
+
+    #: Defaults to the original bill's store. Supplied only when the exchange
+    #: is being done at the OTHER branch, which the two malls do routinely.
+    store_id: uuid.UUID | None = None
+    customer_id: uuid.UUID | None = None
+    salesperson_user_id: uuid.UUID | None = None
+
+    bill_discount: Decimal = Field(default=_ZERO, ge=0, decimal_places=2, max_digits=14)
+    bill_discount_reason: str | None = Field(default=None, max_length=255)
+    round_off_enabled: bool = False
+
+    notes: str | None = None
+    occurred_at: datetime | None = None
+    terminal_uuid: str | None = Field(default=None, max_length=64)
+    day_session_id: uuid.UUID | None = None
+
+
+class SaleExchangeResult(BaseModel):
+    """Both documents, and how the difference landed.
+
+    Returned together because an exchange is not finished until the counter can
+    see both: the credit note proves the goods came back, the invoice is what
+    the customer walks out with.
+    """
+
+    credit_note: SaleRead
+    sale: SaleRead
+    #: Value of the returned goods spent on the new bill.
+    credit_applied: Decimal
+    #: Still owed by the customer. Zero on an even swap or when they paid the
+    #: difference at the counter.
+    balance_due: Decimal
+    #: Owed TO the customer — the returned goods were worth more. Either
+    #: refunded (when a method was given) or left on the credit note.
+    credit_remaining: Decimal
+
+
 class AdvanceCreate(BaseModel):
     """Body for `POST /sales/advances` — money in, no goods yet.
 

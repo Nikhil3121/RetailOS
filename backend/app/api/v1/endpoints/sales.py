@@ -24,6 +24,8 @@ from app.schemas.sale import (
     SaleLineReturnable,
     SalePaymentCollect,
     SaleRead,
+    SaleExchangeCreate,
+    SaleExchangeResult,
     SaleReturnCreate,
     SaleSummary,
     SaleVoidRequest,
@@ -220,6 +222,51 @@ async def create_return(
     """
     credit = await SaleService(db).create_return(sale_id, payload, user_id=user.id)
     return SaleRead.model_validate(credit)
+
+
+@router.post(
+    "/{sale_id}/exchange",
+    response_model=SaleExchangeResult,
+    status_code=status.HTTP_201_CREATED,
+    summary="Swap goods for other goods in one action.",
+    dependencies=[Depends(require_min_role(UserRole.CASHIER))],
+)
+async def create_exchange(
+    sale_id: uuid.UUID,
+    payload: SaleExchangeCreate,
+    db: DbSession,
+    user: CurrentUser,
+) -> SaleExchangeResult:
+    """Wrong size is the commonest reason a customer comes back.
+
+    TWO DOCUMENTS COME BACK, not one: a credit note for what was returned and a
+    full-value invoice for what was taken instead. Under GST the return needs
+    its own document and the replacement is a sale at its own price with its
+    own tax — netting them into a single discounted bill would understate the
+    invoice and leave the return unrecorded.
+
+    The credit is spent on the new bill as a `credit_note` TENDER, so both
+    documents keep their true value and the day book does not report cash
+    moving through a drawer it never touched.
+
+    Both are written in one transaction. A credit note without its replacement
+    is a refund nobody authorised; an invoice without its credit note is a
+    customer charged twice.
+    """
+    credit_note, sale, applied, balance, remaining = await SaleService(
+        db
+    ).create_exchange(sale_id, payload, user_id=user.id)
+    return SaleExchangeResult(
+        credit_note=SaleRead.model_validate(credit_note),
+        sale=SaleRead.model_validate(sale),
+        credit_applied=applied,
+        balance_due=balance,
+        # What is genuinely LEFT OVER, not the credit note's unpaid balance.
+        # A credit note whose value was spent on the replacement still shows a
+        # balance — that is how the document is stored — and reporting it here
+        # would tell the counter to hand over money that has already been used.
+        credit_remaining=remaining,
+    )
 
 
 @router.post(

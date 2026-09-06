@@ -12,7 +12,18 @@ from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 
-from sqlalchemy import ForeignKey, Index, Numeric, String, Text, TypeDecorator, Uuid, text
+from sqlalchemy import (
+    ForeignKey,
+    Index,
+    JSON,
+    Numeric,
+    String,
+    Text,
+    TypeDecorator,
+    Uuid,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, UUIDPKMixin, UtcDateTime
@@ -82,6 +93,19 @@ class DaySession(UUIDPKMixin, TimestampMixin, Base):
 
     # Filled in on close.
     counted_cash: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    #: The drawer as notes, e.g. {"500": 6, "100": 11}.
+    #:
+    #: Optional. When it is given the total is DERIVED from it rather than
+    #: asserted, so a fat-fingered digit cannot masquerade as a short drawer —
+    #: and a discrepancy becomes investigable ("exactly one 500 missing")
+    #: instead of merely noticed.
+    #:
+    #: JSON rather than a column per note: India has redenominated twice in
+    #: living memory, and a schema that has to migrate every time the currency
+    #: changes will be wrong at exactly the wrong moment.
+    cash_denominations: Mapped[dict[str, int] | None] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"), nullable=True
+    )
     expected_cash: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     cash_diff: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
 

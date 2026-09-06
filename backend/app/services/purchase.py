@@ -33,6 +33,7 @@ from app.db.models.purchase import PurchaseOrder, PurchaseOrderLine, PurchaseOrd
 from app.db.models.store import Store
 from app.db.models.supplier import Supplier
 from app.schemas.purchase import (
+    LastPurchaseRate,
     POLineCreate,
     PurchaseOrderCreate,
     PurchaseOrderSummary,
@@ -335,3 +336,65 @@ class PurchaseService:
         # PO-YYYYMMDD-XXXXXX  (6 hex chars ≈ 16.7M/day collision space)
         today = date.today().strftime("%Y%m%d")
         return f"PO-{today}-{secrets.token_hex(3).upper()}"
+
+    async def last_purchase_rates(
+        self,
+        *,
+        variant_ids: list[uuid.UUID],
+        supplier_id: uuid.UUID | None = None,
+    ) -> list[LastPurchaseRate]:
+        """The most recent cost paid for each of these items.
+
+        ONLY FROM ORDERS THAT WERE ACTUALLY RECEIVED
+        A draft, confirmed-but-unreceived, or cancelled order records a rate
+        that was PROPOSED, not paid. Quoting one back as "what it cost last
+        time" would let a rate the shop never actually paid — possibly one it
+        rejected — become the baseline it negotiates from.
+
+        MOST RECENT BY ORDER DATE, NOT BY ROW AGE
+        A purchase order entered late — a paper GRN typed up a week after the
+        goods arrived — must not outrank one placed after it. The buyer means
+        "the last time we bought this", which is about when it was ordered.
+        """
+        if not variant_ids:
+            return []
+
+        rows = (
+            await self.db.execute(
+                select(PurchaseOrderLine, PurchaseOrder, Supplier)
+                .join(PurchaseOrder, PurchaseOrder.id == PurchaseOrderLine.purchase_order_id)
+                .join(Supplier, Supplier.id == PurchaseOrder.supplier_id)
+                .where(
+                    PurchaseOrderLine.variant_id.in_(variant_ids),
+                    PurchaseOrder.status == PurchaseOrderStatus.RECEIVED,
+                )
+                .order_by(
+                    PurchaseOrder.order_date.desc(),
+                    PurchaseOrder.created_at.desc(),
+                )
+            )
+        ).all()
+
+        # First row per variant wins — the query is already ordered newest
+        # first, so this is the most recent received rate for each.
+        out: list[LastPurchaseRate] = []
+        seen: set[uuid.UUID] = set()
+        for line, po, supplier in rows:
+            if line.variant_id in seen:
+                continue
+            seen.add(line.variant_id)
+            out.append(
+                LastPurchaseRate(
+                    variant_id=line.variant_id,
+                    unit_cost=line.unit_cost,
+                    purchase_order_id=po.id,
+                    purchase_order_number=po.number,
+                    supplier_id=supplier.id,
+                    supplier_name=supplier.name,
+                    order_date=po.order_date,
+                    from_other_supplier=(
+                        supplier_id is not None and supplier.id != supplier_id
+                    ),
+                )
+            )
+        return out

@@ -83,6 +83,17 @@ class PaymentMethod(str, Enum):
     CARD = "card"
     UPI = "upi"
     OTHER = "other"
+    #: The value of goods handed back, spent on the bill that replaces them.
+    #:
+    #: A tender, not a discount. An exchange is TWO GST documents — a credit
+    #: note for what came back and a full-value invoice for what went out —
+    #: and folding the credit into the new bill as a discount would understate
+    #: the invoice, misstate its GST, and leave the returned goods with no
+    #: credit note at all.
+    #:
+    #: It is also, deliberately, not cash: nothing left the drawer, so the day
+    #: book must not count it as if something had.
+    CREDIT_NOTE = "credit_note"
 
 
 class _SaleStatusType(TypeDecorator):

@@ -9,7 +9,7 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.db.models.day_session import DaySession, DayStatus
 from app.db.models.sale import PaymentMethod, Sale, SalePayment, SaleStatus
 from app.db.models.store import Store
@@ -70,15 +70,41 @@ class DaySessionService:
                 "Session is already closed.", code="DAY_SESSION_ALREADY_CLOSED"
             )
 
+        # ---- what was actually in the drawer -------------------------------
+        #
+        # When a breakdown is given the total is DERIVED from it, never taken
+        # on trust. A typed total and a note count that disagree mean one of
+        # them is wrong, and guessing which would be the software quietly
+        # deciding how much money the shop has. So it refuses and says by how
+        # much they differ, while the person is still standing at the till with
+        # the cash in their hands.
+        counted = payload.counted_cash
+        if payload.denominations:
+            derived = sum(
+                Decimal(note) * count for note, count in payload.denominations.items()
+            )
+            if derived != payload.counted_cash:
+                raise ValidationError(
+                    "The notes counted do not add up to the total entered.",
+                    code="CASH_COUNT_MISMATCH",
+                    details={
+                        "notes_add_up_to": str(derived),
+                        "total_entered": str(payload.counted_cash),
+                        "difference": str(derived - payload.counted_cash),
+                    },
+                )
+            counted = derived
+
         # Expected cash = opening + cash payments received during the session.
         expected = await self.recompute_expected_cash(session)
 
         session.status = DayStatus.CLOSED
         session.closed_by_user_id = user_id
         session.closed_at = datetime.now(timezone.utc)
-        session.counted_cash = payload.counted_cash
+        session.counted_cash = counted
+        session.cash_denominations = payload.denominations
         session.expected_cash = expected
-        session.cash_diff = payload.counted_cash - expected
+        session.cash_diff = counted - expected
         if payload.notes:
             session.notes = (
                 f"{session.notes}\n{payload.notes}" if session.notes else payload.notes

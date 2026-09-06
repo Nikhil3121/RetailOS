@@ -123,7 +123,14 @@ async def sales_by(
     "/item-profit",
     response_model=ItemProfitReport,
     summary="Margin per item, from the cost recorded at the time of sale.",
-    dependencies=[Depends(require_min_role(UserRole.MANAGER))],
+    # OWNER, not manager — unlike every other report here.
+    #
+    # A margin report is a cost-price report: anyone who can read it knows what
+    # the shop pays its suppliers. That is the owner's business, not the
+    # counter's, and in a part-owned branch it is commercially sensitive. The
+    # sales breakdowns next door stay at manager level because revenue is
+    # something a manager is meant to be managing.
+    dependencies=[Depends(require_min_role(UserRole.OWNER))],
 )
 async def item_profit(
     db: DbSession,
@@ -132,7 +139,7 @@ async def item_profit(
     store_id: uuid.UUID | None = None,
     limit: int = Query(200, ge=1, le=1000),
 ) -> ItemProfitReport:
-    """Owner-visible margin. Manager and above.
+    """Owner only.
 
     The response carries `uncosted_lines` and `uncosted_revenue`: sales in the
     period that have no cost recorded and are therefore NOT in the totals.
