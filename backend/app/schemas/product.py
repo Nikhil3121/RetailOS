@@ -38,6 +38,14 @@ class VariantBase(BaseModel):
     overstock_point: Decimal | None = Field(default=None, ge=0, decimal_places=3, max_digits=14)
     sort_order: int = 0
     is_active: bool = True
+    origin_store_id: uuid.UUID | None = Field(
+        default=None,
+        description=(
+            "Which branch's RANGE this SKU came from — the legacy product "
+            "series. Provenance only: it never decides which store's stock is "
+            "deducted, which is always the store that billed the sale."
+        ),
+    )
 
     @field_validator("barcode")
     @classmethod
@@ -62,6 +70,7 @@ class VariantUpdate(BaseModel):
     overstock_point: Decimal | None = Field(default=None, ge=0, decimal_places=3, max_digits=14)
     sort_order: int | None = None
     is_active: bool | None = None
+    origin_store_id: uuid.UUID | None = None
 
 
 class VariantRead(ORMModel):
@@ -79,6 +88,7 @@ class VariantRead(ORMModel):
     overstock_point: Decimal | None
     sort_order: int
     is_active: bool
+    origin_store_id: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
 

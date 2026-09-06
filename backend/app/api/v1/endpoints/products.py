@@ -45,6 +45,13 @@ async def list_products(
     category_id: uuid.UUID | None = None,
     brand_id: uuid.UUID | None = None,
     is_active: bool | None = None,
+    origin_store_id: uuid.UUID | None = Query(
+        None,
+        description=(
+            "Only products with at least one SKU from this branch's range. "
+            "Provenance, not stock location."
+        ),
+    ),
 ) -> Page[ProductSummary]:
     rows, total = await ProductService(db).list(
         page=page,
@@ -53,6 +60,7 @@ async def list_products(
         category_id=category_id,
         brand_id=brand_id,
         is_active=is_active,
+        origin_store_id=origin_store_id,
     )
     return Page[ProductSummary](items=rows, total=total, page=page, page_size=page_size)
 

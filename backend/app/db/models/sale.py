@@ -306,6 +306,21 @@ class SaleLine(UUIDPKMixin, TimestampMixin, Base):
     # variant, because today's MRP on a three-month-old bill would show the
     # customer a saving they never received. NULL on lines written before this.
     mrp: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    # Which branch's RANGE this SKU came from, as it stood at the time of sale.
+    #
+    # Snapshotted for the same reason as `mrp` above: re-assigning a SKU to
+    # another range next month must not rewrite a bill already printed and
+    # handed to a customer.
+    #
+    # On the LINE, not the sale, because one customer can buy from both ranges
+    # on one bill. This is what answers "how many MS1 items did MS2 sell
+    # today"; it has no bearing on which store's stock was deducted.
+    origin_store_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("stores.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     # Percentage discount off the line (0..100).
     discount_pct: Mapped[Decimal] = mapped_column(
         Numeric(5, 2), nullable=False, default=Decimal("0.00")

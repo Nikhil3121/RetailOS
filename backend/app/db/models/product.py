@@ -170,6 +170,26 @@ class ProductVariant(UUIDPKMixin, TimestampMixin, Base):
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    # ---- which branch's range this SKU came from ---------------------------
+    #
+    # PROVENANCE, NOT LOCATION. This says "the MS1 range" or "the MS2 range";
+    # it does not say where the stock is. Stock lives in stock_balances keyed
+    # by (variant, store), and a sale always deducts from the store that
+    # billed it. Reading this as a stock location would take a transferred
+    # garment out of inventory twice.
+    #
+    # On the VARIANT rather than the product because the legacy data says so:
+    # in the MS2 export, product 360 ("COAT PANT") has three SKUs in the MS1
+    # series and the rest in MS2's. Series is a property of the SKU.
+    #
+    # NULL for everything created before this and for a shop with one branch.
+    origin_store_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("stores.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # Raw row from legacy import (see migration 0014).
     source_data: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB().with_variant(JSON(), "sqlite"), nullable=True

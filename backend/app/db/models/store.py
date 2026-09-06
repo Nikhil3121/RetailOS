@@ -40,6 +40,16 @@ class Store(UUIDPKMixin, TimestampMixin, Base):
     # separate businesses under separate GSTINs.
     receipt_message: Mapped[str | None] = mapped_column(String(280), nullable=True)
 
+    # This branch's identifier in the outgoing Richie Retail system: "1" for
+    # MS MALL (Thana Road), "3" for MS MALL 2 (GT Road). Written during the
+    # legacy import so imported rows can be matched to a branch, and kept
+    # afterwards so a re-run or a later reconciliation can find its way back.
+    legacy_code: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+
+    # This branch's product series label — "MS1", "MS2". Used to default the
+    # origin of a SKU created by hand later; never consulted after that.
+    sku_prefix: Mapped[str | None] = mapped_column(String(16), nullable=True)
+
     is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
 
     users: Mapped[list["User"]] = relationship("User", back_populates="store")

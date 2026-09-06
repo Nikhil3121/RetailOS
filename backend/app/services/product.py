@@ -102,11 +102,26 @@ class ProductService:
         category_id: uuid.UUID | None = None,
         brand_id: uuid.UUID | None = None,
         is_active: bool | None = None,
+        origin_store_id: uuid.UUID | None = None,
     ) -> tuple[list[ProductSummary], int]:
         page = max(page, 1)
         page_size = min(max(page_size, 1), 1000)
 
         base = select(Product)
+
+        if origin_store_id is not None:
+            # Which branch's RANGE the SKU came from — not where its stock is.
+            # Matched with EXISTS on the variants because one product can carry
+            # SKUs from both ranges: in the legacy export, "COAT PANT" has three
+            # SKUs in the MS1 series and the rest in MS2's.
+            base = base.where(
+                select(ProductVariant.id)
+                .where(
+                    ProductVariant.product_id == Product.id,
+                    ProductVariant.origin_store_id == origin_store_id,
+                )
+                .exists()
+            )
         if search:
             # Match on any field a shopkeeper is likely to type into the
             # search box: product name, HSN code, or the variant's SKU /
@@ -278,6 +293,7 @@ class ProductService:
             overstock_point=payload.overstock_point,
             sort_order=payload.sort_order,
             is_active=payload.is_active,
+            origin_store_id=payload.origin_store_id,
         )
 
     def _image_from_payload(self, payload: ImageCreate) -> ProductImage:
