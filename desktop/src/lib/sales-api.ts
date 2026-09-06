@@ -42,6 +42,12 @@ export interface SalePayment {
 }
 
 export interface Sale {
+  /** Money off the whole bill, and where it came from. */
+  bill_discount?: string;
+  bill_discount_reason?: string | null;
+  round_off?: string;
+  coupon_id?: string | null;
+  coupon_code?: string | null;
   /** Free gift earned on this bill. Snapshotted, so it survives the
    *  scheme being renamed or deleted. */
   reward_label?: string | null;
@@ -115,6 +121,18 @@ export interface SaleCreate {
   /** Empty array = pure credit bill; whole grand total becomes balance_due. */
   payments: SalePaymentInput[];
   notes?: string | null;
+  /**
+   * Money off the WHOLE bill, applied after the lines are totalled.
+   *
+   * Deliberately not spread across the lines: allocating it would change each
+   * line's taxable value and therefore its GST.
+   */
+  bill_discount?: string;
+  bill_discount_reason?: string | null;
+  /** The coupon it came from. The server re-checks the amount against it. */
+  coupon_id?: string | null;
+  /** Round the final figure to the whole rupee, as a GST invoice usually does. */
+  round_off_enabled?: boolean;
   /** Idempotency key for offline replay. Same UUID on every retry = one sale. */
   client_uuid?: string | null;
 }

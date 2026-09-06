@@ -48,6 +48,7 @@ from app.schemas.sale import (
     SaleSummary,
 )
 from app.services.audit import AuditService
+from app.services.coupon import CouponService
 from app.services.day_session import DaySessionService
 from app.services.inventory import InventoryService
 from app.services.loyalty import LoyaltyService
@@ -285,7 +286,42 @@ class SaleService:
             discount_total += disc_amt
             tax_total += tax
 
-        grand_total = _round(subtotal_net + tax_total)
+        gross_total = _round(subtotal_net + tax_total)
+
+        # ---- money off the whole bill --------------------------------------
+        #
+        # Applied AFTER the lines are totalled and deliberately NOT spread
+        # across them: allocating it would change each line's taxable value and
+        # therefore its GST, which is a tax decision and not one a discount box
+        # should be making. The per-line tax computed above stands untouched.
+        #
+        # Clamped to the bill: a discount larger than the total would produce a
+        # negative sale, which reads downstream as a return.
+        bill_discount = _round(payload.bill_discount or _ZERO)
+        if bill_discount < _ZERO:
+            raise ValidationError(
+                "A bill discount cannot be negative.", code="BILL_DISCOUNT_NEGATIVE"
+            )
+        if bill_discount > gross_total:
+            raise ValidationError(
+                "The discount is more than the bill.",
+                code="BILL_DISCOUNT_EXCEEDS_TOTAL",
+                details={"bill": str(gross_total), "discount": str(bill_discount)},
+            )
+
+        after_discount = _round(gross_total - bill_discount)
+
+        # ---- round off ------------------------------------------------------
+        #
+        # To the whole rupee, which is the convention on a GST invoice and the
+        # only amount a cash drawer can actually make. Stored as its own signed
+        # figure so the bill still adds up on paper.
+        round_off = _ZERO
+        if payload.round_off_enabled:
+            rounded = after_discount.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+            round_off = _round(rounded - after_discount)
+
+        grand_total = _round(after_discount + round_off)
 
         paid_total = _round(sum((p.amount for p in payload.payments), start=_ZERO))
         # Under-payment is allowed — the shortfall becomes `balance_due` and the
@@ -347,6 +383,9 @@ class SaleService:
                     paid_total=paid_total,
                     change_due=change_due,
                     balance_due=balance_due,
+                    bill_discount=bill_discount,
+                    bill_discount_reason=payload.bill_discount_reason,
+                    round_off=round_off,
                 )
         except IntegrityError:
             # Another request carrying the same client_uuid committed between
@@ -371,6 +410,46 @@ class SaleService:
                 session=session,
                 sale_id=sale_id_placeholder,
                 user_id=user_id,
+            )
+
+        # ---- coupon --------------------------------------------------------
+        #
+        # RE-VALIDATED server-side rather than trusted. The client sends which
+        # coupon and how much it took off; the server recomputes the discount
+        # from the coupon's own rules and refuses if they disagree. Otherwise
+        # naming any coupon would let a modified request set any discount.
+        if payload.coupon_id is not None:
+            from app.schemas.coupon import CouponValidateRequest
+
+            coupons = CouponService(self.db)
+            coupon = await coupons.get(payload.coupon_id)
+            check = await coupons.validate(
+                CouponValidateRequest(
+                    code=coupon.code,
+                    bill_amount=gross_total,
+                    customer_id=payload.customer_id,
+                )
+            )
+            if not check.valid:
+                raise ValidationError(
+                    check.reason or "That coupon cannot be used on this bill.",
+                    code="COUPON_INVALID",
+                )
+            if check.computed_discount != bill_discount:
+                raise ValidationError(
+                    "The coupon discount does not match the bill.",
+                    code="COUPON_DISCOUNT_MISMATCH",
+                    details={
+                        "expected": str(check.computed_discount),
+                        "supplied": str(bill_discount),
+                    },
+                )
+
+            sale_row = await self.get(sale_id_placeholder)
+            sale_row.coupon_id = coupon.id
+            sale_row.coupon_code = coupon.code
+            await coupons.apply_to_sale(
+                coupon.id, sale=sale_row, discount_amount=bill_discount
             )
 
         # ---- reward points ---------------------------------------------------
@@ -508,6 +587,9 @@ class SaleService:
         paid_total: Decimal,
         change_due: Decimal,
         balance_due: Decimal,
+        bill_discount: Decimal = _ZERO,
+        bill_discount_reason: str | None = None,
+        round_off: Decimal = _ZERO,
     ) -> None:
         """Reserve stock and insert the sale. Always called inside a SAVEPOINT."""
         # A BUNDLE TAKES ITS COMPONENTS OUT OF STOCK, NOT ITSELF.
@@ -569,6 +651,9 @@ class SaleService:
             paid_total=paid_total,
             change_due=change_due,
             balance_due=balance_due,
+            bill_discount=bill_discount,
+            bill_discount_reason=payload.bill_discount_reason,
+            round_off=round_off,
             notes=payload.notes,
             completed_at=now,
             created_by_user_id=user_id,

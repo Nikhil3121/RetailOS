@@ -93,7 +93,33 @@ class CouponService:
         return coupon
 
     async def delete(self, coupon_id: uuid.UUID) -> None:
+        """Remove a coupon that has never been used.
+
+        A coupon someone has actually redeemed cannot be deleted: its
+        redemption rows carry the discount that came off a real bill, and
+        `coupon_redemptions.coupon_id` is ON DELETE RESTRICT precisely so that
+        history cannot be quietly detached from the money.
+
+        Checked here rather than left to the database, because an unhandled
+        IntegrityError escapes as a 500 — the caller is told the server broke
+        when in fact it correctly refused. Switching the coupon off is the
+        right move for a finished promotion.
+        """
         coupon = await self.get(coupon_id)
+
+        used = await self.db.scalar(
+            select(func.count(CouponRedemption.id)).where(
+                CouponRedemption.coupon_id == coupon_id
+            )
+        )
+        if used:
+            raise ConflictError(
+                "This coupon has been used on real bills and cannot be deleted. "
+                "Switch it off instead.",
+                code="COUPON_IN_USE",
+                details={"redemptions": int(used)},
+            )
+
         await self.db.delete(coupon)
         await self.db.flush()
 

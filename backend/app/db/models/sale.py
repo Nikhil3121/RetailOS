@@ -245,6 +245,42 @@ class Sale(UUIDPKMixin, TimestampMixin, Base):
 
     completed_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
     voided_at: Mapped[datetime | None] = mapped_column(UtcDateTime(), nullable=True)
+    # ---- money off the whole bill -------------------------------------------
+    #
+    # Held at the BILL level and deliberately not spread across the lines.
+    # Allocating it would change each line's taxable value and therefore its
+    # GST, which is a tax decision rather than a display one. The per-line tax
+    # already computed stands exactly as it was.
+    #
+    # This one column is what unblocked three things: a plain "₹200 off",
+    # coupons (built, with a validate endpoint, and unreachable because there
+    # was nowhere to put the money), and loyalty redemption reducing the bill
+    # it was redeemed against.
+    bill_discount: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), nullable=False, default=Decimal("0.00")
+    )
+    bill_discount_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Signed. -0.40 takes 240.40 down to 240; +0.60 takes 239.40 up to 240.
+    #
+    # Stored rather than recomputed on display: it is part of what the customer
+    # actually paid, and re-deriving it later under a changed rounding rule
+    # would make an old bill stop adding up.
+    round_off: Mapped[Decimal] = mapped_column(
+        Numeric(6, 2), nullable=False, default=Decimal("0.00")
+    )
+
+    # The coupon applied, plus a SNAPSHOT of its code. Snapshotted for the same
+    # reason as the reward label below: a coupon renamed or deleted next month
+    # must not change what a printed bill says was used.
+    coupon_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("coupons.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    coupon_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
     # ---- gift earned on this bill ------------------------------------------
     #
     # The scheme it came from, plus a SNAPSHOT of what the customer was handed.

@@ -253,6 +253,26 @@ export function Invoice(): JSX.Element {
                   <Row label="SGST" value={`₹${sgstAmount.toFixed(2)}`} />
                 </>
               )}
+              {/* Money off the WHOLE bill, and the rounding. Each on its own
+                  line, below the tax, so the invoice visibly adds up in front
+                  of the customer rather than jumping to a total they cannot
+                  reconstruct. */}
+              {Number(sale.bill_discount ?? 0) > 0 && (
+                <Row
+                  label={
+                    sale.coupon_code ? `Discount (${sale.coupon_code})` : 'Bill discount'
+                  }
+                  value={`− ₹${Number(sale.bill_discount).toFixed(2)}`}
+                />
+              )}
+              {Number(sale.round_off ?? 0) !== 0 && (
+                <Row
+                  label="Round off"
+                  value={`${Number(sale.round_off) > 0 ? '+' : '−'} ₹${Math.abs(
+                    Number(sale.round_off),
+                  ).toFixed(2)}`}
+                />
+              )}
               <div className="my-2 border-t border-border-strong" />
               <div className="flex items-baseline justify-between">
                 <dt className="text-sm font-medium">Grand total</dt>

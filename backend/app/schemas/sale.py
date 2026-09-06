@@ -73,6 +73,21 @@ class SaleCreate(BaseModel):
     # An empty list means "credit sale" — the whole grand_total becomes balance_due
     # and the bill can be collected against later via POST /sales/{id}/payments.
     payments: list[SalePaymentInput] = Field(default_factory=list)
+    # ---- money off the whole bill -------------------------------------------
+    # A plain "₹200 off", negotiated at the counter. Applied after the lines
+    # are totalled and NOT spread across them, because allocating it would
+    # change each line's taxable value and therefore its GST.
+    bill_discount: Decimal = Field(default=_ZERO, ge=0, decimal_places=2, max_digits=14)
+    bill_discount_reason: str | None = Field(default=None, max_length=255)
+    # The coupon this discount came from, when it came from one. The AMOUNT
+    # still arrives in `bill_discount` — the server re-validates the coupon and
+    # refuses if the two disagree, so a tampered client cannot invent a
+    # discount by naming a coupon.
+    coupon_id: uuid.UUID | None = None
+    # Round the final figure to the whole rupee, as a GST invoice conventionally
+    # does. Off by default so no existing caller changes behaviour.
+    round_off_enabled: bool = False
+
     notes: str | None = None
     # Client-generated idempotency key. When the Billing UI queues a bill
     # while offline, it stamps the same UUID on every retry — if the server
@@ -267,6 +282,11 @@ class SaleRead(ORMModel):
     paid_total: Decimal
     change_due: Decimal
     balance_due: Decimal
+    bill_discount: Decimal = _ZERO
+    bill_discount_reason: str | None = None
+    round_off: Decimal = _ZERO
+    coupon_id: uuid.UUID | None = None
+    coupon_code: str | None = None
     notes: str | None
     completed_at: datetime | None
     voided_at: datetime | None

@@ -51,6 +51,11 @@ import { listStores } from '@/lib/stores-api';
 import { snapshotStores } from '@/lib/store-snapshot';
 import { LoyaltyChip } from '@/components/billing/LoyaltyChip';
 import { RewardBanner } from '@/components/billing/RewardBanner';
+import {
+  BillDiscount,
+  EMPTY_DISCOUNT,
+  type BillDiscountState,
+} from '@/components/billing/BillDiscount';
 import { resolvePrices, type ResolvedPrice } from '@/lib/price-lists-api';
 import { findUserByStaffCode, listUsers } from '@/lib/users-api';
 import { cn } from '@/lib/cn';
@@ -261,6 +266,11 @@ export function Billing(): JSX.Element {
   // -----------------------------------------------------------------------
   const [lines, setLines] = useState<BillLine[]>([]);
   const [customerId, setCustomerId] = useState<string>('');
+  // Money off the whole bill — typed by hand or filled in by a coupon. The
+  // server re-checks a coupon's amount, so this is a convenience, not a source
+  // of truth.
+  const [discount, setDiscount] = useState<BillDiscountState>(EMPTY_DISCOUNT);
+  const [roundOff, setRoundOff] = useState(false);
   const [salespersonId, setSalespersonId] = useState<string>('');
   const [staffCodeBuffer, setStaffCodeBuffer] = useState('');
   const [staffLookupError, setStaffLookupError] = useState<string | null>(null);
@@ -757,6 +767,8 @@ export function Billing(): JSX.Element {
     }
     window.localStorage.setItem(HELD_BILLS_KEY, JSON.stringify([...prev, snapshot]));
     setLines([]);
+    setDiscount(EMPTY_DISCOUNT);
+    setRoundOff(false);
     setNotes('');
     setFlash({ kind: 'success', text: `Bill held. ${prev.length + 1} bill(s) on hold.` });
   }
@@ -878,6 +890,10 @@ export function Billing(): JSX.Element {
       customer_id: customerId || null,
       salesperson_user_id: salespersonId || null,
       notes: notes.trim() || null,
+      bill_discount: discount.amount || undefined,
+      bill_discount_reason: discount.reason.trim() || null,
+      coupon_id: discount.couponId,
+      round_off_enabled: roundOff,
       lines: lines.map((l) => ({
         variant_id: l.variant_id,
         quantity: String(l.quantity),
@@ -965,6 +981,8 @@ export function Billing(): JSX.Element {
 
   function resetBillState(): void {
     setLines([]);
+    setDiscount(EMPTY_DISCOUNT);
+    setRoundOff(false);
     setCustomerId('');
     setSalespersonId('');
     setStaffCodeBuffer('');
@@ -1690,6 +1708,27 @@ export function Billing(): JSX.Element {
               misread. It was previously set at the same weight as the three
               lines above it.
             */}
+            {lines.length > 0 && (
+              <BillDiscount
+                billTotal={totals.grand.toFixed(2)}
+                customerId={customerId || null}
+                value={discount}
+                onChange={setDiscount}
+              />
+            )}
+
+            {lines.length > 0 && (
+              <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={roundOff}
+                  onChange={(e) => setRoundOff(e.target.checked)}
+                  className="h-3.5 w-3.5"
+                />
+                Round to the nearest rupee
+              </label>
+            )}
+
             <div className="mt-2 flex items-baseline justify-between gap-3 border-t border-border pt-3">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                 Total payable
