@@ -324,3 +324,70 @@
     margin: 12mm;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Barcode label sheet
+ *
+ * Sizes are in MILLIMETRES, not pixels. A label printed at the wrong physical
+ * size is a label a scanner refuses, so the sheet is laid out in real units and
+ * `print-color-adjust` stops the browser "helpfully" lightening the bars.
+ * ------------------------------------------------------------------------- */
+.label-sheet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2mm;
+  background: #ffffff;
+  padding: 2mm;
+  border-radius: 8px;
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 1mm;
+  background: #ffffff;
+  color: #000000;
+  border: 1px dashed #cbd5e1;   /* a cutting guide on plain sticker paper */
+  font-family: system-ui, sans-serif;
+  text-align: center;
+}
+
+.label-name {
+  font-size: 6pt;
+  line-height: 1.1;
+  max-height: 2.4em;
+  overflow: hidden;
+  font-weight: 600;
+}
+
+.label-code svg { display: block; }
+
+.label-price {
+  font-size: 8pt;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+@media print {
+  @page { margin: 5mm; }
+
+  .label-sheet {
+    gap: 0;
+    padding: 0;
+  }
+
+  /* No guide lines on real die-cut label stock. */
+  .label { border: none; }
+
+  /* Chromium lightens dark fills to save toner by default. On a barcode that
+     is the difference between scanning and not. */
+  .label,
+  .label-code svg rect {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

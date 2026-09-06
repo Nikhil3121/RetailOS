@@ -20,6 +20,7 @@ from app.api.v1.endpoints import (
     customers,
     bundles,
     loyalty,
+    payables,
     rewards,
     price_lists,
     dashboard,
@@ -56,6 +57,7 @@ api_router.include_router(price_lists.router)
 api_router.include_router(bundles.router)
 api_router.include_router(loyalty.router)
 api_router.include_router(rewards.router)
+api_router.include_router(payables.router)
 api_router.include_router(inventory.router)
 api_router.include_router(purchases.router)
 api_router.include_router(day_sessions.router)

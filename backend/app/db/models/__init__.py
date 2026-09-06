@@ -59,6 +59,12 @@ from app.db.models.sale import (
 )
 from app.db.models.store import Store
 from app.db.models.supplier import Supplier
+from app.db.models.supplier_ledger import (
+    PriceChange,
+    PurchaseOrderCharge,
+    SupplierEntryType,
+    SupplierLedgerEntry,
+)
 from app.db.models.unit import Unit
 from app.db.models.user import RefreshToken, User, UserRole
 
@@ -100,6 +106,10 @@ __all__ = [
     "PaymentMethod",
     "Product",
     "RewardScheme",
+    "PriceChange",
+    "PurchaseOrderCharge",
+    "SupplierEntryType",
+    "SupplierLedgerEntry",
     "ProductImage",
     "ProductVariant",
     "PurchaseOrder",

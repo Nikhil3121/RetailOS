@@ -39,6 +39,7 @@ from app.schemas.purchase import (
     PurchaseOrderUpdate,
 )
 from app.services.inventory import InventoryService
+from app.services.supplier_ledger import SupplierLedgerService
 
 
 _ZERO = Decimal("0.00")
@@ -223,6 +224,28 @@ class PurchaseService:
         po.status = PurchaseOrderStatus.RECEIVED
         po.received_at = datetime.now(timezone.utc)
         await self.db.flush()
+
+        # ---- what we now owe the supplier ---------------------------------
+        #
+        # Posted at RECEIPT, not at confirmation: a purchase order is an
+        # intention, and the debt only exists once the goods are in the
+        # building. Any freight or deduction agreed on the bill moves the
+        # figure, which is why the charges are added in rather than the plain
+        # grand total being used.
+        ledger = SupplierLedgerService(self.db)
+        charges = await ledger.charges_total(po.id)
+        owed = (po.grand_total + charges).quantize(Decimal("0.01"))
+        if owed > Decimal("0.00"):
+            await ledger.record_purchase(
+                supplier_id=po.supplier_id,
+                amount=owed,
+                on_date=po.order_date,
+                reference=po.number,
+                purchase_order_id=po.id,
+                store_id=po.store_id,
+                user_id=user_id,
+            )
+
         return po
 
     async def _conversion_factors(

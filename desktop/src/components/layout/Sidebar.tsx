@@ -108,6 +108,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: 'Categories', to: '/categories', icon: FolderTree, minRole: 'cashier' },
       { label: 'Brands', to: '/brands', icon: Tag, minRole: 'cashier' },
       { label: 'Units', to: '/units', icon: Ruler, minRole: 'cashier' },
+      { label: 'Barcode labels', to: '/labels', icon: Tag, minRole: 'manager' },
       { label: 'Price lists', to: '/price-lists', icon: Tag, minRole: 'manager' },
     ],
   },

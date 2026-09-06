@@ -23,6 +23,7 @@ from app.core.exceptions import ConflictError, NotFoundError
 from app.db.models.brand import Brand
 from app.db.models.category import Category
 from app.db.models.product import Product, ProductImage, ProductVariant
+from app.db.models.supplier_ledger import PriceChange
 from app.db.models.unit import Unit
 from app.schemas.product import (
     ImageCreate,
@@ -225,8 +226,35 @@ class ProductService:
             if clash and clash.id != variant.id:
                 raise ConflictError("Barcode already in use.", code="VARIANT_BARCODE_TAKEN")
 
+        # ---- repricing history ---------------------------------------------
+        #
+        # Captured BEFORE the fields are overwritten, because after the loop
+        # the old values are gone. Only written when a price actually moved —
+        # a row for every edit would bury the price changes in noise about
+        # renamed variants.
+        priced = ("cost_price", "mrp", "selling_price")
+        moved = {
+            f: (getattr(variant, f), data[f])
+            for f in priced
+            if f in data and data[f] is not None and getattr(variant, f) != data[f]
+        }
+
         for field, value in data.items():
             setattr(variant, field, value)
+
+        if moved:
+            self.db.add(
+                PriceChange(
+                    variant_id=variant.id,
+                    old_cost_price=moved.get("cost_price", (None, None))[0],
+                    new_cost_price=moved.get("cost_price", (None, None))[1],
+                    old_mrp=moved.get("mrp", (None, None))[0],
+                    new_mrp=moved.get("mrp", (None, None))[1],
+                    old_selling_price=moved.get("selling_price", (None, None))[0],
+                    new_selling_price=moved.get("selling_price", (None, None))[1],
+                )
+            )
+
         await self.db.flush()
         return variant
 

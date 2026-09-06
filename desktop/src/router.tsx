@@ -50,6 +50,7 @@ import { Campaigns } from '@/pages/crm/Campaigns';
 import { Coupons } from '@/pages/crm/Coupons';
 import { Loyalty } from '@/pages/crm/Loyalty';
 import { Rewards } from '@/pages/crm/Rewards';
+import { LabelPrint } from '@/pages/catalog/LabelPrint';
 import { CustomerDetail } from '@/pages/crm/CustomerDetail';
 import { InventoryHealth } from '@/pages/insights/InventoryHealth';
 import { PurchaseAnalytics } from '@/pages/insights/PurchaseAnalytics';
@@ -113,6 +114,7 @@ export const router = createHashRouter([
           { path: 'coupons', element: <Coupons /> },
           { path: 'loyalty', element: <Loyalty /> },
           { path: 'rewards', element: <Rewards /> },
+          { path: 'labels', element: <LabelPrint /> },
           {
             path: 'campaigns',
             element: <RequireAuth minRole="manager" />,
