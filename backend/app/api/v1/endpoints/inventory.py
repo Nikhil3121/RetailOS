@@ -37,7 +37,11 @@ async def stock_levels(
     search: str | None = None,
     stock_filter: str | None = Query(
         None,
-        description="One of: in_stock, out_of_stock, low_stock. Omit for all.",
+        description=(
+            "One of: in_stock, out_of_stock, low_stock, negative. Omit for all. "
+            "`negative` is deliberately separate from `out_of_stock`: a zero "
+            "means the shelf is empty, a negative means the books are wrong."
+        ),
     ),
     include_inactive: bool = False,
     page: int = Query(1, ge=1),
@@ -49,6 +53,7 @@ async def stock_levels(
         low_stock_only=stock_filter == "low_stock",
         out_of_stock_only=stock_filter == "out_of_stock",
         in_stock_only=stock_filter == "in_stock",
+        negative_only=stock_filter == "negative",
         include_inactive=include_inactive,
         page=page,
         page_size=page_size,

@@ -45,6 +45,14 @@ async def list_sales(
     page_size: int = Query(50, ge=1, le=1000),
     store_id: uuid.UUID | None = None,
     customer_id: uuid.UUID | None = None,
+    search: str | None = Query(
+        None,
+        description=(
+            "Invoice number, customer phone, or customer name. Phone matching "
+            "ignores spaces, dashes and brackets — a customer who returns "
+            "without their bill gives a number, not a format."
+        ),
+    ),
     status_filter: SaleStatus | None = Query(None, alias="status"),
     from_date: date | None = None,
     to_date: date | None = None,
@@ -52,6 +60,7 @@ async def list_sales(
     rows, total = await SaleService(db).list(
         store_id=store_id,
         customer_id=customer_id,
+        search=search,
         status=status_filter,
         from_date=from_date,
         to_date=to_date,

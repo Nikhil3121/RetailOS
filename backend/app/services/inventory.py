@@ -260,6 +260,7 @@ class InventoryService:
         low_stock_only: bool = False,
         out_of_stock_only: bool = False,
         in_stock_only: bool = False,
+        negative_only: bool = False,
         include_inactive: bool = False,
         page: int = 1,
         page_size: int = 100,
@@ -323,7 +324,21 @@ class InventoryService:
             )
 
         qty_expr = func.coalesce(StockBalance.quantity, _ZERO)
-        if out_of_stock_only:
+        # Negative stock is checked FIRST because it is a different fact from
+        # every other filter here.
+        #
+        # A zero means "we have none". A NEGATIVE means the books are broken —
+        # something was sold that the system did not know existed, a receipt
+        # was never entered, or a count was posted against stock that had
+        # already moved. It cannot be true of a physical shelf, so every row
+        # this returns is a data problem someone has to go and resolve.
+        #
+        # `out_of_stock` uses `<= 0` and therefore hides these among the empty
+        # rows, which is exactly why they went unnoticed. That behaviour is
+        # left alone; this is a separate question with a separate answer.
+        if negative_only:
+            stmt = stmt.where(qty_expr < 0)
+        elif out_of_stock_only:
             stmt = stmt.where(qty_expr <= 0)
         elif in_stock_only:
             stmt = stmt.where(qty_expr > 0)
@@ -335,9 +350,14 @@ class InventoryService:
             stmt = stmt.where(qty_expr <= ProductVariant.reorder_point)
 
         total = await self.db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-        stmt = stmt.order_by(
-            Product.name, ProductVariant.sort_order, Store.code
-        ).offset((page - 1) * page_size).limit(page_size)
+        if negative_only:
+            # Worst first. A manager working through a negative-stock list is
+            # triaging, and −40 matters more than −1; alphabetical order would
+            # bury the item that is most wrong on page four.
+            stmt = stmt.order_by(qty_expr.asc(), Product.name, Store.code)
+        else:
+            stmt = stmt.order_by(Product.name, ProductVariant.sort_order, Store.code)
+        stmt = stmt.offset((page - 1) * page_size).limit(page_size)
 
         result = await self.db.execute(stmt)
         rows: list[StockLevelRow] = []

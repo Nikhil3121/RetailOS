@@ -168,6 +168,13 @@ export function listSales(params: {
   page_size?: number;
   store_id?: string;
   status?: SaleStatus;
+  /**
+   * Invoice number, customer phone, or customer name.
+   *
+   * Phone matching ignores spaces, dashes and brackets — a customer who
+   * returns without their bill gives a number, not a format.
+   */
+  search?: string;
   from_date?: string;
   to_date?: string;
 } = {}): Promise<Paginated<SaleSummary>> {
@@ -175,6 +182,7 @@ export function listSales(params: {
   qs.set('page', String(params.page ?? 1));
   qs.set('page_size', String(params.page_size ?? 100));
   if (params.store_id) qs.set('store_id', params.store_id);
+  if (params.search) qs.set('search', params.search);
   if (params.status) qs.set('status', params.status);
   if (params.from_date) qs.set('from_date', params.from_date);
   if (params.to_date) qs.set('to_date', params.to_date);

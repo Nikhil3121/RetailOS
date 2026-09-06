@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronsLeft,
   ChevronsRight,
+  ClipboardList,
   Coins,
   DoorOpen,
   FolderTree,
@@ -118,6 +119,9 @@ const NAV_GROUPS: NavGroup[] = [
     icon: ShoppingCart,
     items: [
       { label: 'Inventory', to: '/inventory', icon: ShoppingCart, minRole: 'cashier' },
+      // Sits under Operations rather than Reports because it is a job someone
+      // does on the floor, not a figure someone reads at a desk.
+      { label: 'Stock count', to: '/stock-count', icon: ClipboardList, minRole: 'cashier' },
       { label: 'Purchases', to: '/purchases', icon: Receipt, minRole: 'cashier' },
     ],
   },

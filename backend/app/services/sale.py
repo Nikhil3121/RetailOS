@@ -18,7 +18,7 @@ import uuid
 from datetime import date, datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -272,6 +272,12 @@ class SaleService:
                     unit_price=price,
                     # Snapshot alongside the price it is compared against.
                     mrp=variant.mrp,
+                    # What the goods cost the shop, as of now. Snapshotted for
+                    # the same reason as `mrp`: reading the variant's current
+                    # cost_price at report time would re-price every past bill
+                    # whenever a supplier changes their rate, silently moving
+                    # a season's margin.
+                    unit_cost=variant.cost_price,
                     discount_pct=item.discount_pct,
                     discount_amount=disc_amt,
                     tax_rate=tax_rate,
@@ -824,11 +830,24 @@ class SaleService:
         store_id: uuid.UUID | None = None,
         status: SaleStatus | None = None,
         customer_id: uuid.UUID | None = None,
+        search: str | None = None,
         from_date: date | None = None,
         to_date: date | None = None,
         page: int = 1,
         page_size: int = 50,
     ) -> tuple[list[SaleSummary], int]:
+        """Bills, filtered.
+
+        `search` exists for one situation that happens every week: a customer
+        comes back to exchange something and does not have the bill. What they
+        DO have is their phone number. Without this the cashier is scrolling a
+        date-ordered list hoping to recognise a total, which is slow and
+        usually wrong.
+
+        Matches the invoice number, the customer's phone, and the customer's
+        name — in that order of usefulness. Phone is the one that matters:
+        names are spelt three ways and numbers are not.
+        """
         page = max(page, 1)
         page_size = min(max(page_size, 1), 1000)
 
@@ -839,6 +858,33 @@ class SaleService:
             base = base.where(Sale.status == status)
         if customer_id is not None:
             base = base.where(Sale.customer_id == customer_id)
+        if search and search.strip():
+            term = search.strip()
+            like = f"%{term}%"
+            # A phone number is matched on its DIGITS ONLY. People write
+            # "+91 98765 00055", "98765-00055" and "9876500055" for the same
+            # number, and a plain LIKE finds none of the others.
+            digits = "".join(ch for ch in term if ch.isdigit())
+            conditions = [
+                Sale.number.ilike(like),
+                Sale.customer.has(Customer.name.ilike(like)),
+            ]
+            if digits:
+                conditions.append(
+                    Sale.customer.has(
+                        func.replace(
+                            func.replace(
+                                func.replace(
+                                    func.replace(Customer.phone, " ", ""),
+                                    "-", "",
+                                ),
+                                "(", "",
+                            ),
+                            ")", "",
+                        ).ilike(f"%{digits}%")
+                    )
+                )
+            base = base.where(or_(*conditions))
         if from_date is not None:
             base = base.where(func.date(Sale.created_at) >= from_date)
         if to_date is not None:
@@ -1157,6 +1203,11 @@ class SaleService:
                     hsn_code=src.hsn_code,
                     quantity=-qty,
                     unit_price=src.unit_price,
+                    # Carried across from the original line, not re-read. The
+                    # credit note has to reverse the SAME margin the sale
+                    # booked; costing a return at today's rate would leave a
+                    # phantom profit or loss behind on a fully-returned bill.
+                    unit_cost=src.unit_cost,
                     discount_pct=src.discount_pct,
                     discount_amount=-disc,
                     tax_rate=src.tax_rate,

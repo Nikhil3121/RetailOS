@@ -395,6 +395,17 @@ class SaleLine(UUIDPKMixin, TimestampMixin, Base):
         nullable=True,
         index=True,
     )
+    # What this unit COST the shop, at the time of sale.
+    #
+    # Snapshotted for the same reason as `mrp`: profit is revenue minus the
+    # cost that was actually paid for the goods, and re-reading the variant's
+    # cost_price today would re-price every historical bill every time a
+    # supplier changes their rate. A season's margin would silently move.
+    #
+    # NULL on lines written before this column existed. The profit report says
+    # how many such lines it could not cost rather than guessing — a margin
+    # built on invented costs is worse than no margin at all.
+    unit_cost: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     # Percentage discount off the line (0..100).
     discount_pct: Mapped[Decimal] = mapped_column(
         Numeric(5, 2), nullable=False, default=Decimal("0.00")

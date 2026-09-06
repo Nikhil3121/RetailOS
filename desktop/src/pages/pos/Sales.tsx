@@ -33,18 +33,34 @@ export function Sales(): JSX.Element {
 
   const [storeId, setStoreId] = useState<string>('');
   const [status, setStatus] = useState<SaleStatus | ''>('');
+  /**
+   * Invoice number, phone, or name.
+   *
+   * The case this exists for: a customer comes back to exchange something and
+   * does not have the bill. What they DO have is the phone number they gave
+   * at the counter.
+   */
+  const [search, setSearch] = useState('');
   const [fromDate, setFromDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [toDate, setToDate] = useState<string>(new Date().toISOString().slice(0, 10));
 
   const storesQuery = useQuery({ queryKey: ['stores'], queryFn: () => listStores(1, 200) });
+  // Searching drops the date range, deliberately.
+  //
+  // The dates default to TODAY, and somebody looking up a bill by phone does
+  // not know when it was — that is the entire reason they are searching. Left
+  // applied, the filter would answer "no such bill" for a bill that exists,
+  // which is worse than no search at all.
+  const searching = search.trim().length > 0;
   const query = useQuery({
-    queryKey: ['sales', storeId, status, fromDate, toDate],
+    queryKey: ['sales', storeId, status, search, fromDate, toDate],
     queryFn: () =>
       listSales({
         store_id: storeId || undefined,
         status: status || undefined,
-        from_date: fromDate || undefined,
-        to_date: toDate || undefined,
+        search: search.trim() || undefined,
+        from_date: searching ? undefined : fromDate || undefined,
+        to_date: searching ? undefined : toDate || undefined,
         page_size: 200,
       }),
   });
@@ -151,13 +167,43 @@ export function Sales(): JSX.Element {
             onChange={(e) => setStatus((e.target.value as SaleStatus) || '')}
           />
         </div>
-        <div className="min-w-[160px]">
-          <Input label="From" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+        <div className="min-w-[220px] flex-1">
+          <Input
+            label="Find a bill"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Phone, invoice no. or name"
+          />
         </div>
         <div className="min-w-[160px]">
-          <Input label="To" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          <Input
+            label="From"
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            disabled={searching}
+          />
+        </div>
+        <div className="min-w-[160px]">
+          <Input
+            label="To"
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            disabled={searching}
+          />
         </div>
       </div>
+
+      {/* Said out loud, because the dates are still on screen and greyed out.
+          A cashier who cannot see WHY they stopped applying will assume the
+          filter is broken. */}
+      {searching && (
+        <p className="text-xs text-slate-500">
+          Searching every date — the day filter does not apply while you are
+          looking for a bill.
+        </p>
+      )}
 
       {/* Bills stored on this terminal, and whether they reached the server.
           Rendered above the server list because an unsynced bill is the thing

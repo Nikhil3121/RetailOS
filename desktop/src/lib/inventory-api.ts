@@ -38,7 +38,17 @@ export interface StockLevelRow {
   is_active: boolean;
 }
 
-export type StockFilter = 'in_stock' | 'out_of_stock' | 'low_stock';
+/**
+ * `negative` is deliberately separate from `out_of_stock`.
+ *
+ * A zero means the shelf is empty. A NEGATIVE means the books are wrong —
+ * something was sold that the system did not know existed, a receipt was
+ * never entered, or a count was posted against stock that had already moved.
+ * It cannot be true of a physical shelf, so every such row is a data problem
+ * somebody has to resolve. `out_of_stock` matches `<= 0` and therefore buries
+ * them among the empty rows, which is exactly why they went unnoticed.
+ */
+export type StockFilter = 'in_stock' | 'out_of_stock' | 'low_stock' | 'negative';
 
 export interface StockMovement {
   id: string;
