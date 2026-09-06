@@ -1,10 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Printer, RotateCcw } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
-import { getSale, PAYMENT_LABEL } from '@/lib/sales-api';
+import { getSale, markSalePrinted, PAYMENT_LABEL } from '@/lib/sales-api';
 import { listStores } from '@/lib/stores-api';
 import { listCustomers } from '@/lib/customers-api';
 import { listUsers } from '@/lib/users-api';
@@ -63,6 +63,47 @@ export function Invoice(): JSX.Element {
     if (sale) window.scrollTo(0, 0);
   }, [sale]);
 
+  /**
+   * Whether the copy about to come out of the printer is a duplicate.
+   *
+   * Frozen at the moment the bill loads and bumped only by our own Print
+   * button. If it tracked `sale.print_count` live, a refetch could flip the
+   * word ORIGINAL to DUPLICATE while the OS print dialog is already open —
+   * the operator would be looking at one thing and printing another.
+   */
+  const [copyNo, setCopyNo] = useState(0);
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (sale && !seeded.current) {
+      seeded.current = true;
+      setCopyNo(sale.print_count ?? 0);
+    }
+  }, [sale]);
+  const isDuplicate = copyNo > 0;
+
+  /**
+   * Print, and count the copy.
+   *
+   * Order matters: the sheet is printed with the mark it currently carries,
+   * and only THEN is the count bumped. Incrementing first would stamp
+   * DUPLICATE on the original — the one copy that must not carry it.
+   *
+   * `window.print()` blocks until the dialog is dismissed, so the state
+   * update after it lands on the next press, not this one.
+   *
+   * The server call is fire-and-forget: a bill must still print with the
+   * network down, and an uncounted copy is a far smaller problem than a
+   * customer standing at the counter with no bill.
+   */
+  function handlePrint(): void {
+    if (!sale) return;
+    window.print();
+    setCopyNo((n) => n + 1);
+    void markSalePrinted(sale.id).catch(() => {
+      /* offline, or the bill was voided — the paper matters more than the tally */
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div className="no-print">
@@ -99,8 +140,8 @@ export function Invoice(): JSX.Element {
                 Return items
               </Button>
             )}
-            <Button leadingIcon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>
-              Print
+            <Button leadingIcon={<Printer className="h-4 w-4" />} onClick={handlePrint}>
+              {isDuplicate ? 'Print duplicate' : 'Print'}
             </Button>
           </div>
         </div>
@@ -142,6 +183,19 @@ export function Invoice(): JSX.Element {
               <div className="text-xs uppercase tracking-wider text-slate-500">
               {isReturn ? 'Credit Note' : 'Tax Invoice'}
             </div>
+              {/*
+                Every copy after the first says so, on the paper.
+
+                Two identical unmarked copies of one GST invoice can each be
+                presented as the bill — for a return, a warranty claim, or to
+                the accountant — and nothing on either tells them apart. The
+                mark is what makes the original the original.
+              */}
+              {isDuplicate && (
+                <div className="mt-1 inline-block rounded-md border border-amber-400 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-800">
+                  Duplicate copy
+                </div>
+              )}
               <div className="mt-1 font-mono text-sm">{sale.number}</div>
               {sale.completed_at && (
                 <div className="mt-1 text-xs text-slate-500">

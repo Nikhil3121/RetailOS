@@ -45,12 +45,36 @@ export interface CheckoutTotals {
   grand: number;
 }
 
+/**
+ * The three ways money comes off the WHOLE bill, rather than off a line.
+ *
+ * Carried into SQLite so an OFFLINE bill's receipt shows the same figure the
+ * cashier quoted and the same figure the server will compute when the bill
+ * eventually syncs. Without them the local row held the gross, and the paper
+ * the customer walked out with disagreed with both databases.
+ */
+export interface BillAdjustments {
+  /** Rupees off the whole bill, after the lines are totalled. */
+  billDiscount?: number;
+  billDiscountReason?: string | null;
+  /** The coupon code as typed. Snapshotted — coupons get edited. */
+  couponCode?: string | null;
+  /** Loyalty points spent. The server owns the ledger; this records the fact. */
+  redeemPoints?: number;
+  /** What the points were worth, in rupees. Part of the discount on the bill. */
+  redeemValue?: number;
+  /** Signed rupees: −0.40 to round down, +0.60 to round up. */
+  roundOff?: number;
+}
+
 export interface LocalCheckoutInput {
   /** Client-generated UUID. Doubles as the idempotency key, so a retry of the
    *  same bill can never create a second sale. */
   clientUuid: string;
   lines: CheckoutLine[];
   totals: CheckoutTotals;
+  /** Whole-bill adjustments. Omit entirely for a bill that has none. */
+  adjustments?: BillAdjustments;
   paymentMethod: string;
   /** What the customer actually handed over. May be less than the total —
    *  the shortfall becomes balance due, exactly as the online flow does. */
@@ -248,6 +272,22 @@ export async function commitLocalSale(
         ]
       : [];
 
+  /**
+   * The payable, derived in the SAME order the server derives it: discounts
+   * first, then round the result. Rounding before the discount, or rounding
+   * twice, moves the total by a rupee — small, and exactly the kind of
+   * mismatch that makes a cashier stop trusting the software.
+   *
+   * The points redemption is added to the bill discount rather than kept
+   * separate, because the server folds it into the same figure: one "money
+   * off" line on the invoice, not two the customer has to reconcile.
+   */
+  const billDiscount =
+    (input.adjustments?.billDiscount ?? 0) + (input.adjustments?.redeemValue ?? 0);
+  const afterDiscount = Math.max(0, input.totals.grand - billDiscount);
+  const roundOff = input.adjustments?.roundOff ?? 0;
+  const payableRupees = afterDiscount + roundOff;
+
   try {
     const res = (await bridge.createSale({
       id: input.clientUuid,
@@ -262,7 +302,15 @@ export async function commitLocalSale(
       subtotalPaise: rupeesToPaise(input.totals.subtotal),
       discountPaise: rupeesToPaise(input.totals.discount),
       taxPaise: rupeesToPaise(input.totals.tax),
-      totalPaise: rupeesToPaise(input.totals.grand),
+      // NOT `totals.grand` — that is the gross of the lines. What is stored is
+      // what the customer actually pays, with the whole-bill adjustments taken
+      // off, because that is the number on the receipt in their hand.
+      totalPaise: rupeesToPaise(payableRupees),
+      billDiscountPaise: rupeesToPaise(billDiscount),
+      billDiscountReason: input.adjustments?.billDiscountReason ?? null,
+      couponCode: input.adjustments?.couponCode ?? null,
+      redeemPoints: Math.max(0, Math.round(input.adjustments?.redeemPoints ?? 0)),
+      roundOffPaise: rupeesToPaise(roundOff),
       notes: input.notes,
       items,
       payments,
@@ -294,6 +342,12 @@ export interface LocalSaleRecord {
   discountPaise: number;
   taxPaise: number;
   totalPaise: number;
+  /** Whole-bill adjustments (migration 009). 0 on a bill written before it. */
+  billDiscountPaise: number;
+  billDiscountReason: string | null;
+  couponCode: string | null;
+  redeemPoints: number;
+  roundOffPaise: number;
   notes: string | null;
   status: string;
   createdAt: string;

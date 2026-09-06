@@ -266,6 +266,32 @@ export function LocalInvoice(): JSX.Element {
           )}
           <Row label="Taxable value" value={money(sale.subtotalPaise)} />
           <Row label="GST" value={money(sale.taxPaise)} />
+          {/* Whole-bill adjustments, each shown. A customer given ₹100 off
+              looks for the ₹100 on the bill; folding it silently into the
+              total is what makes them ask whether it was applied at all. */}
+          {sale.billDiscountPaise > 0 && (
+            <Row
+              label={
+                sale.couponCode
+                  ? `Bill discount (${sale.couponCode})`
+                  : sale.billDiscountReason
+                    ? `Bill discount (${sale.billDiscountReason})`
+                    : 'Bill discount'
+              }
+              value={`− ${money(sale.billDiscountPaise)}`}
+            />
+          )}
+          {/* Points, not rupees — their value is already inside the bill
+              discount above, and a second figure would read as more money off. */}
+          {sale.redeemPoints > 0 && (
+            <Row label="Points redeemed" value={String(sale.redeemPoints)} />
+          )}
+          {sale.roundOffPaise !== 0 && (
+            <Row
+              label="Round off"
+              value={`${sale.roundOffPaise > 0 ? '+' : '−'} ${money(Math.abs(sale.roundOffPaise))}`}
+            />
+          )}
           <div className="flex justify-between border-t border-border pt-2 text-base font-semibold text-white">
             <span>Total</span>
             <span>₹{money(sale.totalPaise)}</span>

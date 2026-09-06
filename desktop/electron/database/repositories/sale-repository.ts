@@ -74,6 +74,21 @@ export interface SaleInput {
   discountPaise?: number;
   taxPaise?: number;
   totalPaise: number;
+  /**
+   * Money off the WHOLE bill, applied after the lines are totalled.
+   *
+   * Kept apart from `discountPaise`, which is the sum of the per-line
+   * discounts. Merging them would make the invoice unexplainable: a bill has
+   * to show what came off each line and what came off the bill.
+   */
+  billDiscountPaise?: number;
+  billDiscountReason?: string | null;
+  /** The coupon code as typed, snapshotted — a coupon can be edited later. */
+  couponCode?: string | null;
+  /** Loyalty points spent. The server owns the ledger; this records the fact. */
+  redeemPoints?: number;
+  /** Signed rounding to the whole rupee: −40 or +60 paise, never both. */
+  roundOffPaise?: number;
   notes?: string | null;
   items: SaleItemInput[];
   payments?: PaymentInput[];
@@ -101,6 +116,11 @@ export interface SaleRecord {
   subtotalPaise: number;
   discountPaise: number;
   taxPaise: number;
+  billDiscountPaise: number;
+  billDiscountReason: string | null;
+  couponCode: string | null;
+  redeemPoints: number;
+  roundOffPaise: number;
   notes: string | null;
   status: string;
   totalPaise: number;
@@ -225,10 +245,12 @@ export class SaleRepository {
           `INSERT INTO sale
              (id, terminal_id, store_id, customer_id, status,
               subtotal_paise, discount_paise, tax_paise, total_paise,
+              bill_discount_paise, bill_discount_reason, coupon_code,
+              redeem_points, round_off_paise,
               notes, local_reference, server_store_id, server_customer_id,
               server_salesperson_user_id, server_day_session_id, occurred_at,
               terminal_uuid, created_at, updated_at, sync_status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
         )
         .run(
           saleId,
@@ -240,6 +262,11 @@ export class SaleRepository {
           input.discountPaise ?? 0,
           input.taxPaise ?? 0,
           input.totalPaise,
+          input.billDiscountPaise ?? 0,
+          input.billDiscountReason ?? null,
+          input.couponCode ?? null,
+          input.redeemPoints ?? 0,
+          input.roundOffPaise ?? 0,
           input.notes ?? null,
           localReference,
           input.serverStoreId ?? null,
@@ -338,6 +365,11 @@ export class SaleRepository {
           discount_paise: number;
           tax_paise: number;
           total_paise: number;
+          bill_discount_paise: number | null;
+          bill_discount_reason: string | null;
+          coupon_code: string | null;
+          redeem_points: number | null;
+          round_off_paise: number | null;
           notes: string | null;
           created_at: string;
           sync_status: string;
@@ -392,6 +424,14 @@ export class SaleRepository {
       subtotalPaise: sale.subtotal_paise,
       discountPaise: sale.discount_paise,
       taxPaise: sale.tax_paise,
+      // Coalesced rather than trusted: a bill written before migration 009
+      // has no value in these columns, and a reprint of one must show no
+      // adjustment — not a blank where a figure belongs.
+      billDiscountPaise: sale.bill_discount_paise ?? 0,
+      billDiscountReason: sale.bill_discount_reason,
+      couponCode: sale.coupon_code,
+      redeemPoints: sale.redeem_points ?? 0,
+      roundOffPaise: sale.round_off_paise ?? 0,
       notes: sale.notes,
       status: sale.status,
       totalPaise: sale.total_paise,

@@ -79,6 +79,15 @@ export interface Sale {
   voided_at: string | null;
   void_reason: string | null;
   created_by_user_id: string | null;
+  /**
+   * How many times this bill has been put on paper.
+   *
+   * 0 means no copy exists yet; every copy after the first is a DUPLICATE and
+   * must say so on its face. A second unmarked copy of a GST invoice is how a
+   * bill gets presented twice — for a return, for a warranty claim, to the
+   * accountant — and neither copy can be told from the other.
+   */
+  print_count: number;
   lines: SaleLine[];
   payments: SalePayment[];
   created_at: string;
@@ -129,6 +138,17 @@ export interface SaleCreate {
    */
   bill_discount?: string;
   bill_discount_reason?: string | null;
+  /**
+   * Loyalty points to spend on this bill.
+   *
+   * Sent WITH the sale rather than redeemed beforehand: the server debits the
+   * points ledger and adds their rupee value to `bill_discount` inside the
+   * same transaction that writes the sale. Redeeming first would leave a
+   * window where the points are gone and no bill exists.
+   *
+   * Requires `customer_id` — points belong to a person, not to a walk-in.
+   */
+  redeem_points?: string;
   /** The coupon it came from. The server re-checks the amount against it. */
   coupon_id?: string | null;
   /** Round the final figure to the whole rupee, as a GST invoice usually does. */
@@ -163,6 +183,18 @@ export function listSales(params: {
 
 export function getSale(id: string): Promise<Sale> {
   return apiRequest({ path: `/sales/${id}`, method: 'GET' });
+}
+
+/**
+ * Record that a paper copy of this bill was produced.
+ *
+ * Called on every print, INCLUDING the first — the counter is what decides
+ * whether the next copy is marked DUPLICATE, so it has to count the original
+ * too. Failure is swallowed by the caller: a printer that works and a counter
+ * that did not increment is better than blocking the customer's bill.
+ */
+export function markSalePrinted(id: string): Promise<Sale> {
+  return apiRequest({ path: `/sales/${id}/printed`, method: 'POST' });
 }
 
 export function createSale(body: SaleCreate): Promise<Sale> {

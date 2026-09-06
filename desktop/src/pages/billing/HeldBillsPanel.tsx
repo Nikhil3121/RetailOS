@@ -1,17 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Clock, Trash2, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/cn';
+import { listParked, unpark, type HeldBillItem } from '@/lib/held-bills-store';
 
 /**
  * Held-bills panel — the resume-side of the F3 Hold Bill flow.
  *
- * Reads snapshots the Billing screen wrote into localStorage under
- * `HELD_BILLS_KEY`, renders them in reverse-chronological order, and calls
- * `onResume` with a snapshot when the operator picks one. The panel owns
- * discard-a-single-row and clear-all buttons; deletion is idempotent so
- * concurrent tabs don't clobber each other.
+ * Lists every cart parked for THIS BRANCH — from the server, so the other
+ * till can see it, falling back to this machine when the network is down.
+ * Rows say which, because a bill parked offline can only be resumed here and a
+ * cashier should not walk to the other counter to find nothing.
+ *
+ * Deletion is idempotent: two tills racing for the same customer is normal,
+ * and the one that loses should simply see the row disappear.
  *
  * Kept in the billing folder (not `components/ui`) because its shape is
  * tightly coupled to the BillLine model on the same page.
@@ -28,27 +31,13 @@ export interface HeldBillSnapshot {
 }
 
 interface HeldBillsPanelProps {
-  storageKey: string;
+  /** Which branch's parked carts to show. Held bills are per branch. */
+  storeId: string;
   open: boolean;
   onClose: () => void;
   onResume: (snapshot: HeldBillSnapshot) => void;
   /** Optional label lookup so we can show the customer's name, not just an id. */
   resolveCustomerName?: (customerId: string | null) => string | undefined;
-}
-
-function readSnapshots(storageKey: string): HeldBillSnapshot[] {
-  try {
-    const raw = window.localStorage.getItem(storageKey);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as HeldBillSnapshot[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeSnapshots(storageKey: string, list: HeldBillSnapshot[]): void {
-  window.localStorage.setItem(storageKey, JSON.stringify(list));
 }
 
 function relativeTime(iso: string): string {
@@ -64,30 +53,40 @@ function relativeTime(iso: string): string {
 }
 
 export function HeldBillsPanel({
-  storageKey,
+  storeId,
   open,
   onClose,
   onResume,
   resolveCustomerName,
 }: HeldBillsPanelProps): JSX.Element | null {
-  const [tick, setTick] = useState(0); // rerender-only counter for re-reading storage
-  const snapshots = useMemo(() => readSnapshots(storageKey), [storageKey, tick, open]);
+  const [items, setItems] = useState<HeldBillItem[]>([]);
+  const [shared, setShared] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  // Refresh the list every 30s so "3m ago" labels stay honest while the panel is open.
+  const refresh = useCallback(async (): Promise<void> => {
+    if (!open) return;
+    setLoading(true);
+    try {
+      const res = await listParked(storeId);
+      setItems(res.items);
+      setShared(res.shared);
+    } finally {
+      setLoading(false);
+    }
+  }, [open, storeId]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  // Re-read every 30s while the panel is open: the "3m ago" labels stay
+  // honest, and a bill the OTHER till parked shows up without anyone
+  // reopening the panel.
   useEffect(() => {
     if (!open) return;
-    const t = window.setInterval(() => setTick((n) => n + 1), 30_000);
+    const t = window.setInterval(() => void refresh(), 30_000);
     return () => window.clearInterval(t);
-  }, [open]);
-
-  // Cross-tab sync — if another tab pushes a new hold, reflect it here.
-  useEffect(() => {
-    function onStorage(e: StorageEvent): void {
-      if (e.key === storageKey) setTick((n) => n + 1);
-    }
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, [storageKey]);
+  }, [open, refresh]);
 
   // Escape closes the panel.
   useEffect(() => {
@@ -101,21 +100,23 @@ export function HeldBillsPanel({
 
   if (!open) return null;
 
-  function discard(id: string): void {
-    const next = readSnapshots(storageKey).filter((s) => s.id !== id);
-    writeSnapshots(storageKey, next);
-    setTick((n) => n + 1);
+  async function discard(item: HeldBillItem): Promise<void> {
+    // Optimistic: the row goes immediately so a busy counter is not waiting on
+    // the network to see its own click take effect.
+    setItems((prev) => prev.filter((s) => s.id !== item.id));
+    await unpark(item);
   }
 
-  function clearAll(): void {
-    writeSnapshots(storageKey, []);
-    setTick((n) => n + 1);
+  async function clearAll(): Promise<void> {
+    const all = items;
+    setItems([]);
+    await Promise.all(all.map((i) => unpark(i)));
   }
 
-  function handleResume(snapshot: HeldBillSnapshot): void {
-    // Remove first so double-click can't restore + duplicate. Idempotent.
-    discard(snapshot.id);
-    onResume(snapshot);
+  async function handleResume(item: HeldBillItem): Promise<void> {
+    // Removed first so a double-click cannot restore the cart twice.
+    await discard(item);
+    onResume(item);
     onClose();
   }
 
@@ -137,7 +138,7 @@ export function HeldBillsPanel({
             <Clock className="h-4 w-4 text-slate-300" />
             <h2 className="text-sm font-semibold text-slate-100">
               Held bills
-              <span className="ml-2 text-slate-400">({snapshots.length})</span>
+              <span className="ml-2 text-slate-400">({items.length})</span>
             </h2>
           </div>
           <button
@@ -150,9 +151,21 @@ export function HeldBillsPanel({
           </button>
         </header>
 
-        {snapshots.length === 0 ? (
+        {/* "Nothing is parked" and "we could not ask" are different facts, and
+            a cashier who reads the first when the second is true will re-ring
+            a bill that is already waiting at the other counter. */}
+        {!shared && !loading && (
+          <div className="mx-4 mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+            Offline — showing this till&apos;s parked bills only. Bills held at
+            the other counter are not listed.
+          </div>
+        )}
+
+        {items.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
-            <p className="text-sm text-slate-300">No held bills.</p>
+            <p className="text-sm text-slate-300">
+              {loading ? 'Loading held bills…' : 'No held bills.'}
+            </p>
             <p className="text-xs text-slate-500">
               Press <kbd className="rounded bg-white/5 px-2 py-1 text-xs">F3</kbd>{' '}
               on the Billing screen to park the current cart.
@@ -161,7 +174,7 @@ export function HeldBillsPanel({
         ) : (
           <>
             <ul className="flex-1 divide-y divide-border overflow-auto">
-              {[...snapshots].reverse().map((s) => {
+              {items.map((s) => {
                 const customer = resolveCustomerName?.(s.customer_id);
                 return (
                   <li
@@ -177,8 +190,17 @@ export function HeldBillsPanel({
                           {s.lines.length} item{s.lines.length === 1 ? '' : 's'}
                         </span>
                       </div>
-                      <div className="mt-1 text-xs text-slate-400">
-                        {relativeTime(s.held_at)}
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                        <span>{relativeTime(s.held_at)}</span>
+                        {/* A bill parked while offline can only be resumed at
+                            THIS till, because no other till can see it. Said
+                            on the row rather than letting a cashier walk to
+                            the other counter and find nothing. */}
+                        {s.source === 'this-till' && (
+                          <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-amber-300">
+                            this till only
+                          </span>
+                        )}
                         {s.notes ? (
                           <span className="ml-2 truncate italic text-slate-500">
                             · {s.notes}
@@ -190,14 +212,14 @@ export function HeldBillsPanel({
                       <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => handleResume(s)}
+                        onClick={() => void handleResume(s)}
                       >
                         Resume
                       </Button>
                       <button
                         type="button"
                         title="Discard this held bill"
-                        onClick={() => discard(s.id)}
+                        onClick={() => void discard(s)}
                         className={cn(
                           'flex h-8 w-8 items-center justify-center rounded-md text-slate-400',
                           'hover:bg-rose-500/10 hover:text-rose-300',
@@ -211,7 +233,7 @@ export function HeldBillsPanel({
               })}
             </ul>
             <footer className="border-t border-border px-4 py-2 text-right">
-              <Button size="sm" variant="ghost" onClick={clearAll}>
+              <Button size="sm" variant="ghost" onClick={() => void clearAll()}>
                 Clear all
               </Button>
             </footer>

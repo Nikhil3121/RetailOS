@@ -291,6 +291,11 @@ class Sale(UUIDPKMixin, TimestampMixin, Base):
     # Counting these is how the shop knows what a promotion cost. There is no
     # counter on the scheme, because a counter drifts the first time a bill is
     # voided.
+    # How many times this bill has been printed. 1 is the original; anything
+    # above marks the paper as a DUPLICATE, because two identical-looking
+    # copies of one invoice is how a bill gets paid twice.
+    print_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
     reward_scheme_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("reward_schemes.id", ondelete="SET NULL"),
@@ -372,6 +377,21 @@ class SaleLine(UUIDPKMixin, TimestampMixin, Base):
     origin_store_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("stores.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # Who sold THIS line.
+    #
+    # `sales.salesperson_user_id` credits the whole bill to one person, and in
+    # a garment shop two staff routinely split one — a saree from her, the
+    # blouse from him. Commission is computed from this, so crediting it all to
+    # whoever happened to be selected last is quietly wrong.
+    #
+    # NULL falls back to the bill's salesperson, so a simple sale and every
+    # bill written before this behave exactly as they did.
+    salesperson_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )

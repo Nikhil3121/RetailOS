@@ -160,6 +160,28 @@ async def void_sale(
     return SaleRead.model_validate(sale)
 
 
+@router.post(
+    "/{sale_id}/printed",
+    response_model=SaleRead,
+    summary="Record that this bill was printed. Later copies are duplicates.",
+    dependencies=[Depends(require_min_role(UserRole.CASHIER))],
+)
+async def mark_printed(sale_id: uuid.UUID, db: DbSession) -> SaleRead:
+    """Count the prints so a reprint can be MARKED as one.
+
+    Two identical-looking copies of one invoice is how a bill gets paid twice,
+    or a return processed against a copy while the original still stands. The
+    count is the only thing that lets the paper say which is which.
+
+    Not gated: printing is not a privileged act, and a cashier whose printer
+    jammed must be able to run it again without finding a manager.
+    """
+    sale = await SaleService(db).get(sale_id)
+    sale.print_count = (sale.print_count or 0) + 1
+    await db.flush()
+    return SaleRead.model_validate(sale)
+
+
 @router.get(
     "/{sale_id}/returnable",
     response_model=list[SaleLineReturnable],

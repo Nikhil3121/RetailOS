@@ -278,6 +278,12 @@ class SaleService:
                     subtotal=net,
                     tax_amount=tax,
                     line_total=line_total,
+                    # Who sold THIS line. Falls back to the bill's salesperson
+                    # when the counter did not split it, so a simple sale and
+                    # every bill written before this behave identically.
+                    salesperson_user_id=(
+                        item.salesperson_user_id or payload.salesperson_user_id
+                    ),
                     sort_order=idx,
                 )
             )
@@ -308,6 +314,36 @@ class SaleService:
                 code="BILL_DISCOUNT_EXCEEDS_TOTAL",
                 details={"bill": str(gross_total), "discount": str(bill_discount)},
             )
+
+        # ---- loyalty points spent on this bill ------------------------------
+        #
+        # The points are converted to rupees by the loyalty service and ADDED
+        # to the bill discount, so there is exactly one "money off" figure on
+        # the invoice rather than two the customer has to reconcile.
+        #
+        # Redeemed in the SAME transaction as the sale. Doing it from the
+        # client afterwards would leave a window where the discount was given
+        # and the points were never taken — or the reverse, which is worse.
+        redeemed_value = _ZERO
+        if payload.redeem_points > _ZERO:
+            if payload.customer_id is None:
+                raise ValidationError(
+                    "Points can only be redeemed for a named customer.",
+                    code="REDEEM_WITHOUT_CUSTOMER",
+                )
+            _entry, redeemed_value = await LoyaltyService(self.db).redeem(
+                customer_id=payload.customer_id,
+                points=payload.redeem_points,
+                reason="Redeemed at billing",
+                user_id=user_id,
+            )
+            bill_discount = _round(bill_discount + redeemed_value)
+            if bill_discount > gross_total:
+                raise ValidationError(
+                    "The points are worth more than the bill.",
+                    code="REDEEM_EXCEEDS_TOTAL",
+                    details={"bill": str(gross_total), "discount": str(bill_discount)},
+                )
 
         after_discount = _round(gross_total - bill_discount)
 

@@ -25,6 +25,13 @@ class SaleLineInput(BaseModel):
         description="Overrides the variant's selling_price when supplied.",
     )
     discount_pct: Decimal = Field(default=_ZERO, ge=0, le=100, decimal_places=2, max_digits=5)
+    salesperson_user_id: uuid.UUID | None = Field(
+        default=None,
+        description=(
+            "Who sold this LINE. Two staff often split one bill, and commission "
+            "is computed from it. Falls back to the bill's salesperson."
+        ),
+    )
     # ---- offline synchronisation (Phase 5B) --------------------------------
     # Both fields are OPTIONAL and default to None, so an online bill posted by
     # the Billing UI behaves exactly as it always has. They exist so a sale
@@ -87,6 +94,11 @@ class SaleCreate(BaseModel):
     # Round the final figure to the whole rupee, as a GST invoice conventionally
     # does. Off by default so no existing caller changes behaviour.
     round_off_enabled: bool = False
+    # Loyalty points to spend on THIS bill. The server works out what they are
+    # worth, adds it to the bill discount, and records the redemption in the
+    # same transaction — so points can never be taken without the discount
+    # appearing, or a discount given without the points being spent.
+    redeem_points: Decimal = Field(default=_ZERO, ge=0, decimal_places=2, max_digits=14)
 
     notes: str | None = None
     # Client-generated idempotency key. When the Billing UI queues a bill
@@ -246,6 +258,7 @@ class SaleLineRead(ORMModel):
     quantity: Decimal
     unit_price: Decimal
     mrp: Decimal | None = None
+    salesperson_user_id: uuid.UUID | None = None
     discount_pct: Decimal
     discount_amount: Decimal
     tax_rate: Decimal
@@ -300,6 +313,7 @@ class SaleRead(ORMModel):
     # it still reads correctly after the scheme is renamed or deleted.
     reward_scheme_id: uuid.UUID | None = None
     reward_label: str | None = None
+    print_count: int = 0
     lines: list[SaleLineRead] = Field(default_factory=list)
     payments: list[SalePaymentRead] = Field(default_factory=list)
     created_at: datetime

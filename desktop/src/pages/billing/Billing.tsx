@@ -70,11 +70,9 @@ import {
 import { useAuthStore } from '@/stores/auth-store';
 import { useHotkey } from '@/lib/hotkeys';
 import { HeldBillsPanel, type HeldBillSnapshot } from './HeldBillsPanel';
+import { listParked, park } from '@/lib/held-bills-store';
 
 const LAST_STORE_KEY = 'retailos.billing.last_store_id';
-// Persisted queue of bills the operator has parked to serve another customer.
-// Kept in localStorage (offline-first) — no backend involvement in this phase.
-const HELD_BILLS_KEY = 'retailos.held-bills.v1';
 
 interface BillLine {
   variant_id: string;
@@ -270,6 +268,13 @@ export function Billing(): JSX.Element {
   // server re-checks a coupon's amount, so this is a convenience, not a source
   // of truth.
   const [discount, setDiscount] = useState<BillDiscountState>(EMPTY_DISCOUNT);
+  // Loyalty points the operator chose to spend, and what they are worth. The
+  // rupee figure is carried alongside because the redemption rate lives in the
+  // loyalty program, not here — see LoyaltyChip.
+  const [redeem, setRedeem] = useState<{ points: number; value: number }>({
+    points: 0,
+    value: 0,
+  });
   const [roundOff, setRoundOff] = useState(false);
   const [salespersonId, setSalespersonId] = useState<string>('');
   const [staffCodeBuffer, setStaffCodeBuffer] = useState('');
@@ -290,34 +295,25 @@ export function Billing(): JSX.Element {
   // count in state so the pill updates the instant a bill is held or
   // resumed, without waiting for the panel to open.
   const [heldOpen, setHeldOpen] = useState(false);
-  const [heldCount, setHeldCount] = useState<number>(() => {
-    try {
-      const raw = window.localStorage.getItem(HELD_BILLS_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed.length : 0;
-    } catch {
-      return 0;
-    }
-  });
-  // Refresh count when the panel closes (in case rows were discarded there)
-  // and on the cross-tab `storage` event.
+  const [heldCount, setHeldCount] = useState(0);
+  // The count now covers BOTH tills, so it has to be asked for rather than
+  // read out of localStorage. Re-asked when the panel closes (rows may have
+  // been discarded there), when a bill is held or resumed, and on a slow
+  // timer so a bill parked at the other counter shows up on this pill.
   useEffect(() => {
+    let cancelled = false;
     function refresh(): void {
-      try {
-        const raw = window.localStorage.getItem(HELD_BILLS_KEY);
-        const parsed = raw ? JSON.parse(raw) : [];
-        setHeldCount(Array.isArray(parsed) ? parsed.length : 0);
-      } catch {
-        setHeldCount(0);
-      }
+      void listParked(storeId).then((res) => {
+        if (!cancelled) setHeldCount(res.items.length);
+      });
     }
     refresh();
-    function onStorage(e: StorageEvent): void {
-      if (e.key === HELD_BILLS_KEY) refresh();
-    }
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, [heldOpen, flash]);
+    const t = window.setInterval(refresh, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
+  }, [storeId, heldOpen, flash]);
 
   // -----------------------------------------------------------------------
   // Offline queue — bills stashed in localStorage when the network is down.
@@ -395,6 +391,28 @@ export function Billing(): JSX.Element {
 
   const totals = useMemo(() => computeTotals(lines), [lines]);
 
+  /**
+   * What the customer actually hands over.
+   *
+   * `totals.grand` is the gross of the lines; the bill discount, the points
+   * redemption and the round-off all come off AFTER it, exactly as the server
+   * applies them. Showing the gross as "Total payable" made the counter ask
+   * for money the bill did not owe, and prefilled that same wrong figure into
+   * amount-paid.
+   *
+   * Mirrors the server's order deliberately: discounts first, round the
+   * result, never round twice.
+   */
+  const bill = useMemo(() => {
+    const off = Number(discount.amount || 0) + redeem.value;
+    const afterDiscount = Math.max(0, totals.grand - off);
+    // Kept as its own signed figure rather than folded into the total, because
+    // a GST invoice has to show WHY the total is not the sum of its parts.
+    const rounding = roundOff ? Math.round(afterDiscount) - afterDiscount : 0;
+    return { afterDiscount, rounding, payable: afterDiscount + rounding };
+  }, [totals.grand, discount.amount, redeem.value, roundOff]);
+  const payable = bill.payable;
+
   // Payment
   const [amountPaid, setAmountPaid] = useState<string>('');
   const [method, setMethod] = useState<PaymentMethod>('cash');
@@ -403,8 +421,8 @@ export function Billing(): JSX.Element {
   // Whenever grand total changes, prefill "amount paid" with the full total,
   // so the common case (fully paid) is a one-click Save.
   useEffect(() => {
-    setAmountPaid(totals.grand > 0 ? totals.grand.toFixed(2) : '');
-  }, [totals.grand]);
+    setAmountPaid(payable > 0 ? payable.toFixed(2) : '');
+  }, [payable]);
 
   // Presentation only — the authoritative totals stay in computeTotals.
   const savings = useMemo(() => summariseSavings(lines), [lines]);
@@ -738,15 +756,23 @@ export function Billing(): JSX.Element {
 
   /**
    * Park the current cart as a "held" bill so the counter can serve a
-   * different customer, then resume this one later. Snapshot lives in
-   * localStorage — no backend round-trip, works offline.
+   * different customer, then resume this one later.
+   *
+   * Parks on the SERVER when it can, so counter 2 can finish a bill counter 1
+   * started — the whole point of holding a bill. With the network down it
+   * falls back to this machine and says so, because a cashier who is told
+   * "held" and then cannot find it at the other till has lost the cart.
+   *
+   * The cart is cleared optimistically: the park path never throws (the store
+   * degrades to local), so there is no case where we clear a cart that was
+   * not saved anywhere.
    */
   function onHold(): void {
     if (lines.length === 0) {
       setFlash({ kind: 'info', text: 'Nothing to hold — cart is empty.' });
       return;
     }
-    const snapshot = {
+    const snapshot: HeldBillSnapshot = {
       id:
         typeof window.crypto?.randomUUID === 'function'
           ? window.crypto.randomUUID()
@@ -758,19 +784,21 @@ export function Billing(): JSX.Element {
       notes,
       lines,
     };
-    let prev: unknown[] = [];
-    try {
-      prev = JSON.parse(window.localStorage.getItem(HELD_BILLS_KEY) ?? '[]');
-      if (!Array.isArray(prev)) prev = [];
-    } catch {
-      prev = [];
-    }
-    window.localStorage.setItem(HELD_BILLS_KEY, JSON.stringify([...prev, snapshot]));
     setLines([]);
     setDiscount(EMPTY_DISCOUNT);
     setRoundOff(false);
     setNotes('');
-    setFlash({ kind: 'success', text: `Bill held. ${prev.length + 1} bill(s) on hold.` });
+    setHeldCount((n) => n + 1);
+    void park(snapshot, deviceIdentity?.deviceUuid ?? null).then((where) => {
+      setFlash(
+        where === 'shared'
+          ? { kind: 'success', text: 'Bill held — any counter can resume it.' }
+          : {
+              kind: 'info',
+              text: 'Bill held on this till only — offline, so the other counter cannot see it.',
+            },
+      );
+    });
   }
 
   /**
@@ -882,6 +910,22 @@ export function Billing(): JSX.Element {
       });
     }
 
+    // Points cannot be spent offline.
+    //
+    // The ledger lives on the server. An offline bill would apply the rupee
+    // discount locally and the sync payload deliberately does NOT ask for the
+    // points again (that would take the money off twice) — so the customer
+    // would get the discount AND keep their points. Refused here, while the
+    // cashier can still act on it, rather than discovered in a balance audit
+    // weeks later.
+    if (!navigator.onLine && redeem.points > 0) {
+      setError(
+        'Points cannot be redeemed while offline. Clear the points to save this bill, ' +
+          'or wait for the connection to return.',
+      );
+      return;
+    }
+
     const clientUuid = newClientUuid();
     // Captured synchronously — setState is async and cannot be read back below.
     let committedSaleId: string | null = null;
@@ -891,6 +935,11 @@ export function Billing(): JSX.Element {
       salesperson_user_id: salespersonId || null,
       notes: notes.trim() || null,
       bill_discount: discount.amount || undefined,
+      // Points travel WITH the bill. The server debits the ledger and folds
+      // their value into the same discount figure, inside the transaction that
+      // writes the sale — so there is no state where the customer's points are
+      // spent on a bill that was never saved.
+      redeem_points: redeem.points ? String(redeem.points) : undefined,
       bill_discount_reason: discount.reason.trim() || null,
       coupon_id: discount.couponId,
       round_off_enabled: roundOff,
@@ -923,6 +972,18 @@ export function Billing(): JSX.Element {
         clientUuid,
         lines,
         totals,
+        // The whole-bill adjustments go INTO the local row. Without them the
+        // offline receipt prints the gross while the queued payload carries
+        // the discount, so the paper in the customer's hand disagrees with
+        // what eventually lands in PostgreSQL.
+        adjustments: {
+          billDiscount: Number(discount.amount || 0),
+          billDiscountReason: discount.reason.trim() || null,
+          couponCode: discount.couponCode ?? null,
+          redeemPoints: redeem.points,
+          redeemValue: redeem.value,
+          roundOff: bill.rounding,
+        },
         paymentMethod: method,
         amountPaid: paidNum,
         storeId: storeId || null,
@@ -1084,7 +1145,7 @@ export function Billing(): JSX.Element {
         }
       />
       <HeldBillsPanel
-        storageKey={HELD_BILLS_KEY}
+        storeId={storeId}
         open={heldOpen}
         onClose={() => setHeldOpen(false)}
         onResume={onResumeHeld}
@@ -1256,14 +1317,19 @@ export function Billing(): JSX.Element {
               hint="Required only when a bill leaves an unpaid balance."
             />
             {/*
-              Points, shown only once a customer is named.
+              Points, shown only once a customer is named — and spendable.
 
-              Read-only here on purpose. Redemption is a decision with a rupee
-              consequence, and a control that could spend a balance sitting
-              beside the customer dropdown is one mis-click away from giving
-              away a discount nobody asked for.
+              The spend control is behind a "Use points" toggle rather than an
+              always-live input: a balance sitting open beside the customer
+              dropdown is one mis-click away from giving away a discount nobody
+              asked for.
             */}
-            <LoyaltyChip customerId={customerId} />
+            <LoyaltyChip
+              customerId={customerId}
+              billTotal={totals.grand.toFixed(2)}
+              redeemPoints={redeem.points}
+              onRedeemChange={(points, value) => setRedeem({ points, value })}
+            />
             {/*
               One salesperson control, not two.
 
@@ -1735,7 +1801,7 @@ export function Billing(): JSX.Element {
               </span>
               <span className="money text-total font-semibold leading-none text-white">
                 <span className="text-xl text-slate-500">₹</span>
-                {totals.grand.toFixed(2)}
+                {payable.toFixed(2)}
               </span>
             </div>
             {/* The gift ladder. Placed directly under the total, because both
@@ -1744,7 +1810,7 @@ export function Billing(): JSX.Element {
                 runs no schemes. */}
             {storeId && lines.length > 0 && (
               <div className="mt-3">
-                <RewardBanner storeId={storeId} amount={totals.grand.toFixed(2)} />
+                <RewardBanner storeId={storeId} amount={payable.toFixed(2)} />
               </div>
             )}
 

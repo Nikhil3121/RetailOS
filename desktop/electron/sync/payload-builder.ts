@@ -61,6 +61,23 @@ export interface SaleCreatePayload {
   lines: SaleLinePayload[];
   payments: SalePaymentPayload[];
   notes: string | null;
+  /**
+   * Money off the whole bill, as the cashier gave it — INCLUDING the rupee
+   * value of any points redeemed, which is how the server carries it too.
+   *
+   * Sent because the server does not recompute it. Omitting it would let a
+   * bill that was discounted at the counter sync at its gross value, so the
+   * customer's receipt and the accounts would permanently disagree.
+   */
+  bill_discount?: string;
+  bill_discount_reason?: string | null;
+  /**
+   * Points to debit. Deliberately NOT sent for an offline bill — see
+   * buildSaleCreatePayload. Present on the type because the same shape is
+   * used for the online path.
+   */
+  redeem_points?: string;
+  round_off_enabled?: boolean;
   client_uuid: string;
 }
 
@@ -163,6 +180,27 @@ export function buildSaleCreatePayload(sale: SaleRecord): BuildResult {
       lines,
       payments,
       notes: sale.notes ?? null,
+      // THE OFFLINE ADJUSTMENTS.
+      //
+      // `billDiscountPaise` already contains the rupee value of any points
+      // redeemed — local-checkout folds them together exactly as the server
+      // does, so one figure covers both and the two records reconcile.
+      //
+      // And that is WHY `redeem_points` is not sent. If it were, the server
+      // would debit the ledger and add the value AGAIN on top of a discount
+      // that already includes it, taking the money off twice. The points are
+      // deducted by the till at redemption time; a bill rung offline settles
+      // its own discount and leaves the ledger to the online path.
+      ...(sale.billDiscountPaise > 0
+        ? {
+            bill_discount: paiseToDecimalString(sale.billDiscountPaise),
+            bill_discount_reason: sale.billDiscountReason ?? null,
+          }
+        : {}),
+      // Whether the counter rounded, not by how much. The server recomputes
+      // the rounding from its own total, and sending our figure could only
+      // ever disagree with it.
+      round_off_enabled: sale.roundOffPaise !== 0,
       client_uuid: sale.id,
     },
   };

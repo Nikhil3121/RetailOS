@@ -252,6 +252,28 @@ export function registerDatabaseIpc(): void {
           ? 0
           : requireInt(input.taxPaise, 'taxPaise', { min: 0 }),
         totalPaise: requireInt(input.totalPaise, 'totalPaise', { min: 0 }),
+        // Whole-bill adjustments. Validated to the same standard as every
+        // other figure crossing this boundary: the renderer is not trusted to
+        // send a well-formed number just because it usually does.
+        billDiscountPaise: input.billDiscountPaise === undefined
+          ? 0
+          : requireInt(input.billDiscountPaise, 'billDiscountPaise', { min: 0 }),
+        billDiscountReason: optionalString(
+          input.billDiscountReason,
+          'billDiscountReason',
+          200,
+        ),
+        couponCode: optionalString(input.couponCode, 'couponCode', 64),
+        redeemPoints: input.redeemPoints === undefined
+          ? 0
+          : requireInt(input.redeemPoints, 'redeemPoints', { min: 0 }),
+        // Signed, unlike every other money field here — rounding down is a
+        // negative figure and a `min: 0` would silently drop it. Bounded to
+        // under a rupee either way, because that is all rounding to the whole
+        // rupee can ever be; anything larger is a bug upstream, not a bill.
+        roundOffPaise: input.roundOffPaise === undefined
+          ? 0
+          : requireInt(input.roundOffPaise, 'roundOffPaise', { min: -99, max: 99 }),
         notes: optionalString(input.notes, 'notes', 1000),
         items,
         payments,

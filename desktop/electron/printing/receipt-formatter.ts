@@ -119,6 +119,14 @@ export interface ReceiptSale {
   discountPaise: number;
   taxPaise: number;
   totalPaise: number;
+  /** Money off the whole bill, apart from the per-line discounts. */
+  billDiscountPaise?: number;
+  billDiscountReason?: string | null;
+  couponCode?: string | null;
+  /** Loyalty points spent. Printed so the customer can see them go. */
+  redeemPoints?: number;
+  /** Signed rounding to the whole rupee. */
+  roundOffPaise?: number;
   notes: string | null;
   terminalUuid: string | null;
   items: {
@@ -242,6 +250,36 @@ export function formatReceipt(sale: ReceiptSale, options: FormatOptions = {}): s
     const half = Math.floor(sale.taxPaise / 2);
     out.push(twoColumn('CGST', paise(half), width));
     out.push(twoColumn('SGST', paise(sale.taxPaise - half), width));
+  }
+
+  // Whole-bill adjustments, each on its own line.
+  //
+  // A customer who was given ₹100 off looks for the ₹100 on the paper. Folding
+  // it into the total silently is what makes someone ask at the counter
+  // whether the discount was actually applied.
+  const billDiscount = sale.billDiscountPaise ?? 0;
+  if (billDiscount > 0) {
+    const label = sale.couponCode
+      ? `Bill discount (${sale.couponCode})`
+      : sale.billDiscountReason
+        ? `Bill discount (${sale.billDiscountReason})`
+        : 'Bill discount';
+    out.push(twoColumn(label, `-${paise(billDiscount)}`, width));
+  }
+  if ((sale.redeemPoints ?? 0) > 0) {
+    // Points, not rupees — their value is already inside the discount above,
+    // and printing it again would read as a second reduction.
+    out.push(twoColumn('Points redeemed', String(sale.redeemPoints), width));
+  }
+  const roundOff = sale.roundOffPaise ?? 0;
+  if (roundOff !== 0) {
+    out.push(
+      twoColumn(
+        'Round off',
+        `${roundOff > 0 ? '+' : '-'}${paise(Math.abs(roundOff))}`,
+        width,
+      ),
+    );
   }
 
   out.push(rule(width, '='));

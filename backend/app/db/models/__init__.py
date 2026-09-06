@@ -27,6 +27,7 @@ from app.db.models.customer import Customer
 from app.db.models.price_list import PriceList, PriceListItem
 from app.db.models.day_session import DaySession, DayStatus
 from app.db.models.expense import Expense, ExpenseCategory, ExpenseStatus
+from app.db.models.held_bill import HeldBill
 from app.db.models.inventory import MovementKind, StockBalance, StockMovement
 from app.db.models.loyalty import (
     CustomerLoyalty,
@@ -105,6 +106,7 @@ __all__ = [
     "NotificationSeverity",
     "PaymentMethod",
     "Product",
+    "HeldBill",
     "RewardScheme",
     "PriceChange",
     "PurchaseOrderCharge",

@@ -45,6 +45,11 @@ function record(over: Partial<SaleRecord> = {}): SaleRecord {
     subtotalPaise: 22857,
     discountPaise: 10290,
     taxPaise: 1143,
+    billDiscountPaise: 0,
+    billDiscountReason: null,
+    couponCode: null,
+    redeemPoints: 0,
+    roundOffPaise: 0,
     notes: 'gift wrap',
     status: 'COMPLETED',
     totalPaise: 24000,
@@ -209,6 +214,7 @@ describe('payload reconstruction', () => {
       'notes',
       'occurred_at',
       'payments',
+      'round_off_enabled',
       'salesperson_user_id',
       'store_id',
       'terminal_uuid',
@@ -221,6 +227,57 @@ describe('payload reconstruction', () => {
       'unit_price',
       'variant_id',
     ]);
+  });
+
+  // ---- whole-bill adjustments (migration 009) --------------------------
+  //
+  // These are the fields that decide whether an OFFLINE bill syncs at the
+  // figure the customer actually paid, or at its gross.
+
+  it('sends the bill discount a cashier gave offline', () => {
+    const built = buildSaleCreatePayload(
+      record({ billDiscountPaise: 5000, billDiscountReason: 'Diwali' }),
+    );
+    if (!built.ok) throw new Error('expected a payload');
+    expect(built.payload.bill_discount).toBe('50.00');
+    expect(built.payload.bill_discount_reason).toBe('Diwali');
+  });
+
+  it('omits the discount fields entirely when nothing came off the bill', () => {
+    const built = buildSaleCreatePayload(record());
+    if (!built.ok) throw new Error('expected a payload');
+    expect('bill_discount' in built.payload).toBe(false);
+    expect('bill_discount_reason' in built.payload).toBe(false);
+  });
+
+  it('never asks the server to debit points a second time', () => {
+    // The rupee value of the redemption is ALREADY inside billDiscountPaise.
+    // Sending redeem_points as well would make the server debit the ledger
+    // and subtract the same value again — the discount taken off twice.
+    const built = buildSaleCreatePayload(
+      record({ billDiscountPaise: 5000, redeemPoints: 200 }),
+    );
+    if (!built.ok) throw new Error('expected a payload');
+    expect('redeem_points' in built.payload).toBe(false);
+    expect(built.payload.bill_discount).toBe('50.00');
+  });
+
+  it('reports THAT the bill was rounded, not by how much', () => {
+    // The server rounds its own total. Our figure could only disagree.
+    const rounded = buildSaleCreatePayload(record({ roundOffPaise: -40 }));
+    if (!rounded.ok) throw new Error('expected a payload');
+    expect(rounded.payload.round_off_enabled).toBe(true);
+    expect('round_off' in rounded.payload).toBe(false);
+
+    const plain = buildSaleCreatePayload(record());
+    if (!plain.ok) throw new Error('expected a payload');
+    expect(plain.payload.round_off_enabled).toBe(false);
+  });
+
+  it('rounds UP as readily as down', () => {
+    const built = buildSaleCreatePayload(record({ roundOffPaise: 60 }));
+    if (!built.ok) throw new Error('expected a payload');
+    expect(built.payload.round_off_enabled).toBe(true);
   });
 
   it('sends the charged line total, not one re-derived from the percentage', () => {
