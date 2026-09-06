@@ -66,6 +66,35 @@ async def get_current_user(
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
+def assert_store_access(user: User, store_id: uuid.UUID) -> None:
+    """Refuse to act on a branch this user does not belong to.
+
+    WHY THIS MATTERS NOW. With one branch, `users.store_id` was recorded and
+    never checked, and nothing could go wrong. With two branches under
+    DIFFERENT GSTINs it becomes a compliance problem: the billing screen lists
+    every store, so an MS1 cashier one click away from the wrong entry in a
+    dropdown can raise an invoice under MS2's GSTIN. That is a wrong tax
+    identity on a customer's bill, and nothing downstream would flag it.
+
+    THE RULE
+        store_id IS NULL  -> not tied to a branch; may act on any store.
+                             Owners and roving managers sit here.
+        store_id set      -> may act only on that store.
+
+    Keyed on the assignment rather than the role on purpose. A role ladder
+    answers "how much may they do"; this answers "where", and they are
+    different questions. An owner pinned to a branch should still be pinned.
+    """
+    if user.store_id is None:
+        return
+    if user.store_id != store_id:
+        raise AuthorizationError(
+            "You can only work in the branch you are assigned to.",
+            code="WRONG_STORE",
+            details={"assigned": str(user.store_id), "requested": str(store_id)},
+        )
+
+
 #: Header carrying the elevation token from `POST /auth/verify-password`.
 #:
 #: A header rather than a body field so the same guard works on DELETE routes,

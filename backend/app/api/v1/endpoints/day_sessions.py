@@ -6,7 +6,12 @@ import uuid
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import CurrentUser, DbSession, require_min_role
+from app.api.deps import (
+    CurrentUser,
+    DbSession,
+    assert_store_access,
+    require_min_role,
+)
 from app.db.models.user import UserRole
 from app.schemas.day_session import (
     CloseSessionRequest,
@@ -58,6 +63,7 @@ async def list_sessions(
 async def open_session(
     payload: OpenSessionRequest, db: DbSession, user: CurrentUser
 ) -> DaySessionRead:
+    assert_store_access(user, payload.store_id)
     session = await DaySessionService(db).open(payload, user_id=user.id)
     return DaySessionRead.model_validate(session)
 

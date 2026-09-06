@@ -6,7 +6,12 @@ import uuid
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import CurrentUser, DbSession, require_min_role
+from app.api.deps import (
+    CurrentUser,
+    DbSession,
+    assert_store_access,
+    require_min_role,
+)
 from app.db.models.user import UserRole
 from app.schemas.common import Page
 from app.schemas.inventory import (
@@ -85,6 +90,7 @@ async def adjust_stock(
     db: DbSession,
     user: CurrentUser,
 ) -> list[StockMovementRead]:
+    assert_store_access(user, payload.store_id)
     movements = await InventoryService(db).adjust(payload, user_id=user.id)
     return [StockMovementRead.model_validate(m) for m in movements]
 
@@ -101,5 +107,9 @@ async def transfer_stock(
     db: DbSession,
     user: CurrentUser,
 ) -> list[StockMovementRead]:
+    # Checked on the SOURCE only. Sending your own branch's stock to the other
+    # mall is ordinary; reaching into the other mall and pulling stock out of
+    # it is not, and would move goods without anyone there knowing.
+    assert_store_access(user, payload.from_store_id)
     movements = await InventoryService(db).transfer(payload, user_id=user.id)
     return [StockMovementRead.model_validate(m) for m in movements]

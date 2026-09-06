@@ -7,7 +7,13 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import CurrentUser, DbSession, require_elevation, require_min_role
+from app.api.deps import (
+    CurrentUser,
+    DbSession,
+    assert_store_access,
+    require_elevation,
+    require_min_role,
+)
 from app.db.models.sale import SaleStatus
 from app.db.models.user import UserRole
 from app.schemas.common import Page
@@ -64,6 +70,10 @@ async def list_sales(
 async def create_sale(
     payload: SaleCreate, db: DbSession, user: CurrentUser
 ) -> SaleRead:
+    # A cashier assigned to one branch must not raise a bill under the other
+    # branch's GSTIN. The store picker lists every store, so this is one wrong
+    # click away without the check.
+    assert_store_access(user, payload.store_id)
     sale = await SaleService(db).create(payload, user_id=user.id)
     await AuditService(db).log(
         action="sale.create",
@@ -197,6 +207,7 @@ async def create_advance(
     the shop's books show it as money held against future goods rather than as
     a sale. The service audits it; no second entry is written here.
     """
+    assert_store_access(user, payload.store_id)
     advance = await SaleService(db).create_advance(payload, user_id=user.id)
     return SaleRead.model_validate(advance)
 
